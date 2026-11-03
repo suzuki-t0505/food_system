@@ -10,7 +10,7 @@ Tech stack: Elixir 1.20.5 / Erlang 29 (OTP 29) / Phoenix 1.8.16 / LiveView / Tai
 
 1. **ドキュメント作成**: 永続ドキュメント(`docs/`)で「何を作るか」を定義
 2. **作業計画**: ステアリングファイル(`.steering/`)で「今回何をするか」を計画
-3. **実装**: tasklist.htmlに従って実装し、進捗を随時更新
+3. **実装**: tasklist.mdに従って実装し、進捗を随時更新
 4. **検証**: テストと動作確認
 5. **更新**: 必要に応じてドキュメント更新
 
@@ -46,9 +46,9 @@ Tech stack: Elixir 1.20.5 / Erlang 29 (OTP 29) / Phoenix 1.8.16 / LiveView / Tai
 
 作業ごとに `.steering/[YYYYMMDD]-[タスク名]/` を作成:
 
-- `requirements.html`: 今回の要求内容
-- `design.html`: 実装アプローチ
-- `tasklist.html`: 具体的なタスクリスト
+- `requirements.md`: 今回の要求内容
+- `design.md`: 実装アプローチ
+- `tasklist.md`: 具体的なタスクリスト
 
 命名規則: `20250115-add-user-profile` 形式
 
@@ -75,9 +75,9 @@ Tech stack: Elixir 1.20.5 / Erlang 29 (OTP 29) / Phoenix 1.8.16 / LiveView / Tai
 
 特定の開発作業における「今回何をするか」を定義:
 
-- `requirements.html`: 今回の作業の要求内容
-- `design.html`: 変更内容の設計
-- `tasklist.html`: タスクリスト
+- `requirements.md`: 今回の作業の要求内容
+- `design.md`: 変更内容の設計
+- `tasklist.md`: タスクリスト
 
 ## ドキュメント管理の原則
 

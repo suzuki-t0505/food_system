@@ -2,7 +2,7 @@
 
 - 対象: `suzuki-t0505/food_system`（1 リポジトリに 2 つの Phoenix アプリを置くモノレポ）
 - 位置づけ: ファイル・ディレクトリを「どこに・どう命名して置くか」を定める。技術の選定は [architecture.md](architecture.md)、機能は [functional-design.md](functional-design.md)、規約は [coding-rules.md](coding-rules.md) に従う
-- 表記: **［現状］** は実リポジトリに存在するもの、**［計画］** は実装で作成するもの。計画のファイル名は規約にもとづく案で、細部は各作業の `.steering/design.html` で確定する
+- 表記: **［現状］** は実リポジトリに存在するもの、**［計画］** は実装で作成するもの。計画のファイル名は規約にもとづく案で、細部は各作業の `.steering/design.md` で確定する
 
 ---
 
@@ -57,7 +57,7 @@ docs/
 | :-- | :-- | :-- | :-- |
 | 永続ドキュメント | `docs/*.md` | 「何を作るか」「どう作るか」の基本設計。プロジェクト全体の北極星 | 低い。変更は承認を得て行う |
 | 下書き・アイデア | `docs/ideas/` | 壁打ち・設計ドラフト・批判的分析レポート。自由形式 | 履歴として残す（正式版へ昇格後も削除しない） |
-| 作業単位のドキュメント | `.steering/{YYYYMMDD}-{タスク名}/` | 「今回何をするか」。`requirements.html` / `design.html` / `tasklist.html` | 作業ごとに新規作成し、履歴として保持 |
+| 作業単位のドキュメント | `.steering/{YYYYMMDD}-{タスク名}/` | 「今回何をするか」。`requirements.md` / `design.md` / `tasklist.md` | 作業ごとに新規作成し、履歴として保持 |
 | HTML モック | `mock/{YYYYMMDD}/` | クライアント向け UI イメージ（`create-mock` スキル） | 作業ごと |
 
 - **命名**: 永続ドキュメントは英語のケバブケース（`product-requirements.md`）。`docs/ideas/` は日本語名可（批判的レビューは対象ファイル名の末尾に `-critical-review` を付ける）。`.steering/` は `20250115-add-user-profile` 形式（日付 8 桁 ＋ 英小文字ケバブケース）。

@@ -1,12 +1,12 @@
 ---
 name: steering-doc-creator
-description: 最終アイディアレポートとコードベースを読み込み、.steering/ ディレクトリに requirements.html・design.html・tasklist.html の3ファイルを生成するサブエージェント。implement-idea スキルから内部的に呼び出される。
+description: 最終アイディアレポートとコードベースを読み込み、.steering/ ディレクトリに requirements.md・design.md・tasklist.md の3ファイルを生成するサブエージェント。implement-idea スキルから内部的に呼び出される。
 tools: Read, Write, Bash
 ---
 
 # ステアリングドキュメント作成エージェント
 
-`docs/ideas/{slug}-final.md` をもとに、`.steering/{date-slug}/` に3つのドキュメントを生成する。
+`docs/ideas/{slug}-final.md` をもとに、`.steering/{date-slug}/` に3つのドキュメント（Markdown）を生成する。
 
 ---
 
@@ -51,128 +51,88 @@ ls priv/repo/migrations/ | tail -20
 
 ---
 
-## ステップ3: requirements.html の生成
+## ステップ3: requirements.md の生成
 
 調査結果をもとに、今回の作業要求を記述する。
 
-**出力先:** `.steering/{date-slug}/requirements.html`
+**出力先:** `.steering/{date-slug}/requirements.md`
 
-```html
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<title>要求定義: {アイディアのトピック名}</title>
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.7; max-width: 840px; margin: 2rem auto; padding: 0 1rem; color: #1f2328; }
-  h1 { border-bottom: 2px solid #d0d7de; padding-bottom: 0.5rem; }
-  h2 { margin-top: 2rem; border-bottom: 1px solid #d0d7de; padding-bottom: 0.3rem; }
-  h3 { margin-top: 1.5rem; }
-  code { background: #f6f8fa; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.9em; }
-</style>
-</head>
-<body>
+```markdown
+# 要求定義: {アイディアのトピック名}
 
-<h1>要求定義: {アイディアのトピック名}</h1>
-<p>
-  作成日: {YYYY-MM-DD}<br>
-  元アイディア: <code>docs/ideas/{slug}-final.md</code>
-</p>
+- 作成日: {YYYY-MM-DD}
+- 元アイディア: `docs/ideas/{slug}-final.md`
 
-<h2>背景・目的</h2>
-<p>{なぜこの変更が必要か。現状の問題点と解決後の状態}</p>
+## 背景・目的
 
-<h2>スコープ</h2>
+{なぜこの変更が必要か。現状の問題点と解決後の状態}
 
-<h3>含む（In Scope）</h3>
-<ul>
-  <li>{具体的な変更・追加内容}</li>
-</ul>
+## スコープ
 
-<h3>含まない（Out of Scope）</h3>
-<ul>
-  <li>{今回は対象外の内容}</li>
-</ul>
+### 含む（In Scope）
 
-<h2>設計上の決定事項</h2>
-<ul>
-  <li>{最終アイディアで確定した設計判断を箇条書きで列挙}</li>
-</ul>
+- {具体的な変更・追加内容}
 
-<h2>制約・前提条件</h2>
-<ul>
-  <li>{技術的制約、ビジネスルール、外部依存など}</li>
-</ul>
+### 含まない（Out of Scope）
 
-</body>
-</html>
+- {今回は対象外の内容}
+
+## 設計上の決定事項
+
+- {最終アイディアで確定した設計判断を箇条書きで列挙}
+
+## 制約・前提条件
+
+- {技術的制約、ビジネスルール、外部依存など}
 ```
 
 ---
 
-## ステップ4: design.html の生成
+## ステップ4: design.md の生成
 
 コードベース調査の結果をもとに、具体的な実装アプローチを記述する。
 
-**出力先:** `.steering/{date-slug}/design.html`
+**出力先:** `.steering/{date-slug}/design.md`
 
-```html
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<title>実装設計: {アイディアのトピック名}</title>
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.7; max-width: 840px; margin: 2rem auto; padding: 0 1rem; color: #1f2328; }
-  h1 { border-bottom: 2px solid #d0d7de; padding-bottom: 0.5rem; }
-  h2 { margin-top: 2rem; border-bottom: 1px solid #d0d7de; padding-bottom: 0.3rem; }
-  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
-  th, td { border: 1px solid #d0d7de; padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; }
-  th { background: #f6f8fa; }
-  code { background: #f6f8fa; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.9em; }
-</style>
-</head>
-<body>
+```markdown
+# 実装設計: {アイディアのトピック名}
 
-<h1>実装設計: {アイディアのトピック名}</h1>
-<p>作成日: {YYYY-MM-DD}</p>
+- 作成日: {YYYY-MM-DD}
 
-<h2>変更概要</h2>
-<p>{変更の全体像を1〜3文で}</p>
+## 変更概要
 
-<h2>変更対象ファイル</h2>
-<table>
-  <thead>
-    <tr><th>ファイル</th><th>変更種別</th><th>変更内容</th></tr>
-  </thead>
-  <tbody>
-    <tr><td><code>{ファイルパス}</code></td><td>新規/変更/削除</td><td>{何をするか}</td></tr>
-  </tbody>
-</table>
+{変更の全体像を1〜3文で}
 
-<h2>DBマイグレーション設計（該当する場合）</h2>
-<p>{テーブル変更・追加の詳細。カラム名・型・制約を明記}</p>
+## 変更対象ファイル
 
-<h2>データ移行方針（該当する場合）</h2>
-<p>{既存データをどう扱うか。移行スクリプトが必要か}</p>
+| ファイル | 変更種別 | 変更内容 |
+| :-- | :-- | :-- |
+| `{ファイルパス}` | 新規/変更/削除 | {何をするか} |
 
-<h2>コーディングパターン</h2>
-<p>{既存コードで踏襲すべきパターン。ファイルパスと行番号で参照}</p>
+## DBマイグレーション設計（該当する場合）
 
-<h2>考慮事項・リスク</h2>
-<p>{実装上の注意点、落とし穴、代替案を取らなかった理由}</p>
+{テーブル変更・追加の詳細。カラム名・型・制約を明記}
 
-</body>
-</html>
+## データ移行方針（該当する場合）
+
+{既存データをどう扱うか。移行スクリプトが必要か}
+
+## コーディングパターン
+
+{既存コードで踏襲すべきパターン。ファイルパスと行番号で参照}
+
+## 考慮事項・リスク
+
+{実装上の注意点、落とし穴、代替案を取らなかった理由}
 ```
 
 ---
 
-## ステップ5: tasklist.html の生成
+## ステップ5: tasklist.md の生成
 
 実装を細かいタスクに分解し、チェックボックス形式で記述する。
 
-**出力先:** `.steering/{date-slug}/tasklist.html`
+**出力先:** `.steering/{date-slug}/tasklist.md`
 
 **タスク分解の原則:**
 - 各タスクは「1ファイルの変更」または「1つの論理的な操作」に相当する粒度にする
@@ -180,59 +140,35 @@ ls priv/repo/migrations/ | tail -20
 - テストタスクは実装タスクとセットで並べる
 - 最後に `make check` を含める
 
-```html
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<title>タスクリスト: {アイディアのトピック名}</title>
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.7; max-width: 840px; margin: 2rem auto; padding: 0 1rem; color: #1f2328; }
-  h1 { border-bottom: 2px solid #d0d7de; padding-bottom: 0.5rem; }
-  h2 { margin-top: 2rem; border-bottom: 1px solid #d0d7de; padding-bottom: 0.3rem; }
-  ul.tasklist { list-style: none; padding-left: 0.25rem; }
-  ul.tasklist li { margin: 0.5rem 0; }
-  ul.tasklist input[type="checkbox"] { margin-right: 0.5rem; }
-  code { background: #f6f8fa; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.9em; }
-</style>
-</head>
-<body>
+```markdown
+# タスクリスト: {アイディアのトピック名}
 
-<h1>タスクリスト: {アイディアのトピック名}</h1>
-<p>作成日: {YYYY-MM-DD}</p>
+- 作成日: {YYYY-MM-DD}
 
-<h2>事前調査</h2>
-<ul class="tasklist">
-  <li><input type="checkbox"> {調査タスク（grep・ファイル確認など）}</li>
-</ul>
+## 事前調査
 
-<h2>フェーズ1: {フェーズ名}</h2>
-<ul class="tasklist">
-  <li><input type="checkbox"> {具体的なタスク（例: invoices テーブルに status カラムを追加するマイグレーション作成）}</li>
-  <li><input type="checkbox"> {具体的なタスク}</li>
-</ul>
+- [ ] {調査タスク（grep・ファイル確認など）}
 
-<h2>フェーズ2: {フェーズ名}</h2>
-<ul class="tasklist">
-  <li><input type="checkbox"> {具体的なタスク}</li>
-</ul>
+## フェーズ1: {フェーズ名}
 
-<h2>テスト</h2>
-<ul class="tasklist">
-  <li><input type="checkbox"> {テスト追加・修正タスク}</li>
-  <li><input type="checkbox"> <code>make check</code> を実行して全チェックをパス</li>
-</ul>
+- [ ] {具体的なタスク（例: invoices テーブルに status カラムを追加するマイグレーション作成）}
+- [ ] {具体的なタスク}
 
-<h2>ドキュメント確認</h2>
-<ul class="tasklist">
-  <li><input type="checkbox"> 永続ドキュメント（<code>docs/</code>）の更新要否を確認</li>
-</ul>
+## フェーズ2: {フェーズ名}
 
-</body>
-</html>
+- [ ] {具体的なタスク}
+
+## テスト
+
+- [ ] {テスト追加・修正タスク}
+- [ ] `make check` を実行して全チェックをパス
+
+## ドキュメント確認
+
+- [ ] 永続ドキュメント（`docs/`）の更新要否を確認
 ```
 
-完了したタスクは `<input type="checkbox" checked>` のように `checked` 属性を付けて更新する（実装フェーズで `implement-idea` スキルが行う）。
+完了したタスクは `- [ ]` を `- [x]` に更新する（実装フェーズで `implement-idea` スキルが行う）。
 
 ---
 
@@ -243,4 +179,4 @@ ls priv/repo/migrations/ | tail -20
 - **既存パターンを優先**: 独自の書き方を導入しない。既存コードの書き方を踏襲する
 - **tasklist は細かく**: 「invoices を変更する」ではなく「`lib/unifield/invoices/invoice.ex` の status フィールドを追加する」と書く
 - **3ファイルとも生成してから終了**: どれか1つ欠けても不完全
-- **出力するHTMLは構造化し見やすく**: 出力するHTMLファイルは判断をしやすいように構造化すること
+- **出力する Markdown は構造化し見やすく**: 判断をしやすいように、見出し・表・チェックリストで構造化すること
