@@ -294,10 +294,21 @@ test/
 
 | # | 内容 |
 | :-- | :-- |
-| 1 | ルートに `.gitignore` が無い。ローカル専用のファイル（`.claude/settings.local.json`・`.claude/scheduled_tasks.lock`）が Git 管理に入っているため、除外するか方針を決める |
-| 2 | `Makefile` に `check` ターゲットが無い。両アプリに `credo` 依存と `.credo.exs` が無い（[architecture.md §14](architecture.md#14-開発環境品質ゲートci)） |
-| 3 | PR ワークフロー（`.github/workflows/`）が無い。lint と test を回すワークフローを追加する |
-| 4 | `.steering/` と `mock/` はまだ無い。作業の開始時に作成する |
+| 1 | `Makefile` に `check` ターゲットが無い。両アプリに `credo` 依存と `.credo.exs` が無い（[architecture.md §14](architecture.md#14-開発環境品質ゲートci)） |
+| 2 | PR ワークフロー（`.github/workflows/`）が無い。lint と test を回すワークフローを追加する |
+| 3 | `.steering/` と `mock/` はまだ無い。作業の開始時に作成する |
+
+### 6.2 ルートの `.gitignore` の方針
+
+ルートに `.gitignore` を置き、次を除外する。アプリ固有の除外（`_build/`・`deps/`・`priv/static/` など）は各アプリの `.gitignore` に書く。
+
+| 対象 | 扱い | 理由 |
+| :-- | :-- | :-- |
+| `.env` / `.env.*`（`.env.example` は除く） | 除外 | 秘密情報の値をコミットしない |
+| `.claude/scheduled_tasks.lock` | 除外（追跡も解除） | セッション ID・PID を含む実行時の状態で、共有する意味がない |
+| `claude_code_session_logs/` | 除外 | セッションログ（`.claude/settings.local.json` の読み取り禁止対象） |
+| `.elixir_ls/`・`.vscode/`・`.idea/`・OS やエディタの一時ファイル | 除外 | 個人の環境 |
+| **`.claude/settings.local.json`** | **除外しない（Git 管理を続ける）** | `.env` や `deps/` などの読み取り禁止（`deny`）を全員に適用する共有設定として、プロジェクトセットアップ時から管理している。名前に `local` を含むが、個人の設定ではない。個人用の許可（`allow`）を足したくなったら、このファイルではなく個人のユーザー設定（`~/.claude/settings.json`）に書く |
 
 ---
 
