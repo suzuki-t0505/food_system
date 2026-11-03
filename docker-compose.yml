@@ -1,0 +1,61 @@
+version: '3'
+services:
+  food_ship_web:
+    build:
+      context: .
+      target: build_as_root
+      dockerfile: Dockerfile.dev
+    environment:
+      PGHOST: ${PGHOST-db}
+      PGPASSWORD: ${PGPASSWORD-postgres}
+    links:
+      - db
+    ports:
+      - 4001:4000
+    volumes:
+      - ./food_ship:/work
+    working_dir: /work
+    command: "elixir --sname food_ship@web --cookie food_ship -S mix phx.server"
+
+  food_vault_web:
+    build:
+      context: .
+      target: build_as_root
+      dockerfile: Dockerfile.dev
+    environment:
+      PGHOST: ${PGHOST-db}
+      PGPASSWORD: ${PGPASSWORD-postgres}
+    links:
+      - db
+    ports:
+      - 4000:4000
+    volumes:
+      - ./food_vault:/work
+    working_dir: /work
+    command: "elixir --sname food_vault@web --cookie food_vault -S mix phx.server"
+
+  db:
+    image: postgres:15.2
+    environment:
+      POSTGRES_PASSWORD: ${PGPASSWORD-postgres}
+    ports:
+      - 5432:5432
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+  pgadmin4:
+    image: dpage/pgadmin4
+    ports:
+        - 7777:80
+    volumes:
+        - pgadmin4data:/var/lib/pgadmin
+    environment:
+        PGADMIN_DEFAULT_EMAIL: user@example.com
+        PGADMIN_DEFAULT_PASSWORD: user@example.com
+        PGADMIN_CONFIG_SERVER_MODE: "False"
+        PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    depends_on:
+      - db
+volumes:
+  dbdata:
+  pgadmin4data:
+

@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(*)",
+      "Bash(sed 's/\\\\.exs$//')",
+      "Bash(xargs ls -lh)",
+      "Bash(python3 *)",
+      "Bash(sed *)",
+      "Bash(grep *)"
+    ],
+    "deny": [
+      "Read(./claude_code_session_logs)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./build)",
+      "Read(./cover)",
+      "Read(./design_samples)",
+      "Read(./.elixir_ls)",
+      "Read(./.git)",
+      "Read(./assets/node_moduels)",
+      "Read(./deps)",
+      "Read(./livebook)",
+      "Read(./out)"
+    ]
+  }
+}
