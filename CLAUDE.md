@@ -2,7 +2,7 @@
 
 ## 技術スタック
 
-Tech stack: Elixir 1.18.2 / Erlang 27 / Phoenix 1.8.16 / LiveView / Tailwind CSS / PostgreSQL / Docker
+Tech stack: Elixir 1.20.5 / Erlang 29 (OTP 29) / Phoenix 1.8.16 / LiveView / Tailwind CSS / PostgreSQL / Docker
 
 ## スペック駆動開発の基本原則
 

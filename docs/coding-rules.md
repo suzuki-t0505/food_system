@@ -1348,6 +1348,8 @@ end
 
 ### 11.3 `current_user` の扱い `[必須]`
 
+> **Phoenix 1.8 のプロジェクト（`food_vault` / `food_ship`）では、本節の `current_user` を `current_scope.user` と読み替える。** `mix phx.gen.auth` は `current_scope` を assign し、`<Layouts.app current_scope={@current_scope} ...>` に渡す必要がある（各アプリの `AGENTS.md`）。assign する場所を plug と `on_mount` の2箇所に限る方針は変わらない。
+
 `current_user` を assign するのは次の2箇所だけ。LiveView 内でセッションから組み立て直さない。
 
 ```elixir
