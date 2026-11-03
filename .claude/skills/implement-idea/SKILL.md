@@ -49,9 +49,9 @@ Agent(
 
   - アイディアファイル: docs/ideas/{slug}-final.md
   - ステアリングディレクトリ: .steering/{YYYYMMDD}-{slug}/
-    - requirements.html: 今回の作業要求（最終アイディアから抽出）
-    - design.html: 実装アプローチ（既存コードパターンを調査して設計）
-    - tasklist.html: チェックボックス形式のタスクリスト
+    - requirements.md: 今回の作業要求（最終アイディアから抽出）
+    - design.md: 実装アプローチ（既存コードパターンを調査して設計）
+    - tasklist.md: チェックボックス（`- [ ]`）形式のタスクリスト
 
   作業日: {今日の日付 YYYYMMDD}
   スラッグ: {slug}
@@ -62,9 +62,9 @@ Agent(
 エージェント完了後、3ファイルをユーザーに確認してもらう:
 
 > 「ステアリングドキュメントを作成しました。内容を確認してください。
-> - `.steering/{date-slug}/requirements.html`
-> - `.steering/{date-slug}/design.html`
-> - `.steering/{date-slug}/tasklist.html`
+> - `.steering/{date-slug}/requirements.md`
+> - `.steering/{date-slug}/design.md`
+> - `.steering/{date-slug}/tasklist.md`
 >
 > 承認いただけたら実装フェーズに進みます。」
 
@@ -74,13 +74,13 @@ Agent(
 
 ユーザーの承認後、以下の手順で実装を進める。
 
-### 3-1. tasklist.html を読み込む
+### 3-1. tasklist.md を読み込む
 
-`.steering/{date-slug}/tasklist.html` を読み、タスク一覧を把握する。
+`.steering/{date-slug}/tasklist.md` を読み、タスク一覧を把握する。
 
 ### 3-2. タスクを順番に実行する
 
-各タスクを1つずつ実行し、完了したら `tasklist.html` の該当タスクの `<input type="checkbox">` に `checked` 属性を追加する。
+各タスクを1つずつ実行し、完了したら `tasklist.md` の該当タスクの `- [ ]` を `- [x]` に更新する。
 
 **実装のルール:**
 - CLAUDE.md の「実装前の確認」セクションに従う
@@ -123,7 +123,7 @@ Agent(
   docs/ 配下の永続ドキュメントへの影響を判定し、必要なものを更新してください。
 
   ステアリングディレクトリ: .steering/{date-slug}/
-  （requirements.html・design.html・tasklist.html の3ファイルを読んでください）
+  （requirements.md・design.md・tasklist.md の3ファイルを読んでください）
   """
 )
 ```

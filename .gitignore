@@ -1,0 +1,25 @@
+# ルートの .gitignore（リポジトリ全体に適用）
+# 各アプリ固有の除外（_build / deps / priv/static など）は food_vault/.gitignore・food_ship/.gitignore に書く。
+
+# --- 秘密情報・個人の環境設定（値をコミットしない） ---
+.env
+.env.*
+!.env.example
+
+# --- Claude Code の実行時ファイル ---
+# ロックファイルはセッションの ID・PID を含む実行時の状態。共有しない
+.claude/scheduled_tasks.lock
+# セッションログ（.claude/settings.local.json の deny 対象）
+/claude_code_session_logs/
+
+# --- エディタ・OS ---
+.elixir_ls/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- ローカルの一時ファイル ---
+*.swp
+*.swo
+*~

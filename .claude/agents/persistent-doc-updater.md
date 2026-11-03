@@ -15,9 +15,9 @@ tools: Read, Write, Bash
 呼び出し時に渡されるステアリングディレクトリのパスから3ファイルを読む:
 
 ```
-.steering/{date-slug}/requirements.html
-.steering/{date-slug}/design.html
-.steering/{date-slug}/tasklist.html
+.steering/{date-slug}/requirements.md
+.steering/{date-slug}/design.md
+.steering/{date-slug}/tasklist.md
 ```
 
 以下を把握する:

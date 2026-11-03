@@ -1,0 +1,411 @@
+# 技術仕様書 (Architecture)
+
+- 対象: 食品在庫管理システム（`food_vault`）と発送システム（`food_ship`）
+- 位置づけ: [functional-design.md](functional-design.md) の機能を「どの技術で・どう実装するか」を定める。ディレクトリ構造の詳細は `repository-structure.md`、開発手順・レビュー観点は `development-guidelines.md`、コード規約は [coding-rules.md](coding-rules.md) に従う
+- 用語は [glossary.md](glossary.md) に従う。本書の決定は、実装着手時に検証が必要なものを [§16](#16-未決事項実装着手時の検証事項) に分けて記す
+
+---
+
+## 1. 技術スタック
+
+| 区分 | 採用 | 備考 |
+| :-- | :-- | :-- |
+| 言語 | Elixir 1.20.5 / Erlang 29（OTP 29） | `mix.exs` は `elixir: "~> 1.20"`、`Dockerfile.dev` は `elixir:1.20.5-otp-29` |
+| Web | Phoenix 1.8.16 / Phoenix LiveView 1.2 / Bandit | HTTP サーバーは Bandit。JSON API は Controller、画面は LiveView |
+| DB | PostgreSQL 15（`postgres:15.2`） | アプリごとに別 DB（`food_vault_dev` / `food_ship_dev`）。拡張は `citext` |
+| ORM | Ecto 3.13 / ecto_sql / Postgrex | `Repo.transact/1`（Ecto 3.13+）を使う |
+| ID | ULID（`Ecto.ULID`） | 依存と採否は [§4](#4-ulid-基盤) |
+| HTTP クライアント | Req 0.5 | 発送 → 在庫の API 呼び出し。両アプリの `mix.exs` に導入済み |
+| CSS / JS | Tailwind CSS 4（daisyUI 5）/ esbuild | `core_components.ex` は改変しない |
+| PDF（発送のみ） | ChromicPDF（ヘッドレス Chromium）を推奨 | 環境構築は別セッション。前提は [§10](#10-pdf-帳票発送システム) |
+| 開発環境 | Docker Compose（`food_vault_web` / `food_ship_web` / `db` / `pgadmin4`） | ホストで直接 `mix` を叩かない |
+| 認証 | `mix phx.gen.auth` ベース（bcrypt） | 自己登録・マジックリンク・メール確認は除去（[§8](#8-認証認可の実装)） |
+
+---
+
+## 2. システム構成
+
+### 2.1 実行構成
+
+```mermaid
+flowchart TB
+  subgraph compose[Docker Compose（開発）]
+    direction LR
+    VW[food_vault_web<br/>Phoenix :4000 → host 4000]
+    SW[food_ship_web<br/>Phoenix :4000 → host 4001]
+    DB[(PostgreSQL 15<br/>food_vault_dev / food_ship_dev)]
+    PGA[pgadmin4 :7777]
+  end
+  SW -- "HTTP /api/v1<br/>http://food_vault_web:4000" --> VW
+  VW --> DB
+  SW --> DB
+  PGA --> DB
+```
+
+- 2 アプリは **別プロジェクト・別 DB・別コンテナ**。Erlang クラスタ・DB 共有はしない（各 `--sname` / `--cookie` も別）。
+- 発送 → 在庫の **一方向 HTTP のみ**。在庫システムから発送システムへの呼び出しは無い。
+- 開発時のホストポート: 在庫 4000、発送 4001（コンテナ内はどちらも 4000）。
+- 本番の Dockerfile・リリース手順・デプロイ先は現状リポジトリに無い（`Dockerfile.dev` のみ）。本番構成は別途定義する（[§16](#16-未決事項実装着手時の検証事項)）。本番では、リバースプロキシで TLS を終端し、在庫の `/api` を発送システムの送信元に限定する。
+
+### 2.2 実行時の依存
+
+| 依存元 → 先 | 方式 | 認証 |
+| :-- | :-- | :-- |
+| 発送 → 在庫 | HTTPS（開発は HTTP）JSON API `/api/v1` | `Authorization: Bearer <サービストークン>` |
+| 各アプリ → DB | Postgrex（接続プール `POOL_SIZE`、既定 10） | 環境変数 `PGHOST` / `PGPASSWORD`、本番は `DATABASE_URL` |
+| 発送 → Chromium | ChromicPDF のセッションプール | ローカルプロセス |
+
+---
+
+## 3. アプリケーション構成とレイヤ
+
+### 3.1 レイヤ
+
+```mermaid
+flowchart TB
+  W["Web 層（Controller / LiveView / Components）"]
+  C["ドメイン層（Context ＋ Schema の 2 層）"]
+  R[Repo / Ecto]
+  U["Utils（Calc / Permission / Logger / Pdf など、状態を持たない関数モジュール）"]
+  W --> C
+  C --> R
+  W --> U
+  C --> U
+```
+
+| 層 | 決定 |
+| :-- | :-- |
+| ドメイン層 | **Context ＋ スキーマの 2 層だけ**。サービス層・リポジトリ層・ユースケース層は作らない。子エンティティ専用の Context は作らない。ディレクトリ ＝ 集約単位（coding-rules §2.1） |
+| Web 層 | Context の公開 API だけを呼ぶ。LiveView / Controller / Component から `Repo` やスキーマへのクエリを直接書かない（§2.2） |
+| Utils | `lib/{app}/utils/`。状態を持たない関数モジュール（GenServer にしない） |
+| 外部 I/O 境界 | 発送の `FoodShip.Inventory.Client`（HTTP）と `FoodShip.Utils.Pdf`（Chromium）。DB を持たず、テストでモックしてよい唯一の境界 |
+
+### 3.2 Context とスキーマ
+
+**在庫管理システム（`FoodVault`）**
+
+| Context | スキーマ（集約） |
+| :-- | :-- |
+| `FoodVault.Accounts` | `User`, `UserToken` |
+| `FoodVault.Makers` | `Maker` |
+| `FoodVault.Warehouses` | `Warehouse` |
+| `FoodVault.Items` | `Item` |
+| `FoodVault.Inventories` | `InventoryLot`, `InventoryTransaction`（入荷・移動・調整、ロットのロックと更新） |
+| `FoodVault.ShipmentOrders` | `ShipmentOrder`, `ShipmentOrderLine`, `ShipmentAllocation`, `ShipmentOrderEvent`（引当・確定・解除・出庫取消） |
+
+**発送システム（`FoodShip`）**
+
+| Context | スキーマ（集約） |
+| :-- | :-- |
+| `FoodShip.Accounts` | `User`, `UserToken` |
+| `FoodShip.Clients` | `Client` |
+| `FoodShip.ShippingItems` | `ShippingItem` |
+| `FoodShip.ExpirationRules` | `ExpirationRule` |
+| `FoodShip.ShippingSlips` | `ShippingSlip`, `SlipAllocatedLot`（登録・引当・再引当・一括再引当・梱包・取消・CSV 取込） |
+| `FoodShip.TotalPicks` | `TotalPick`（作成・再発行・取消・ピック明細と仕分け内訳の集計） |
+| `FoodShip.Inventory.Client` | 在庫側 API クライアント（`Req`）。外部境界モジュール |
+
+- Context が肥大したら集約単位で分割する（目安 800 行、または 1 ファイルに集約が 3 つ以上）。
+- 状態遷移は業務動詞で命名する。在庫: `allocate_shipment_order/1` / `ship_shipment_order/1` / `cancel_shipment_order/1` / `reverse_shipment_order/2`。発送: `allocate_shipping_slip/2` / `reallocate_shipping_slips/2` / `pack_shipping_slip/2` / `cancel_shipping_slip/1` / `reverse_shipping_slip/3` / `create_total_picks/2` / `reissue_total_pick/2` / `cancel_total_pick/2`。
+- **書き込み関数は操作者を第 1 引数に取る**。画面は `user`、在庫 API は `{:api, operator}` を渡し、それぞれ `user_id` / `operator` に記録する。
+
+### 3.3 Context 間の責務（在庫側）
+
+引当・確定・解除・出庫取消は `ShipmentOrders` が担うが、**ロットのロックと数量の更新ロジックは `Inventories` に 1 か所だけ持つ**。`Inventories` は、`Ecto.Multi` を受け取って積む公開関数（例：商品行の `FOR SHARE`、ロットの一括ロック、ロットの加減算、受払履歴の記録）を提供し、`ShipmentOrders` は同一 Multi でそれらを呼ぶ。これにより、ロックキー順・CHECK 制約に合う更新・受払履歴の記録が分散せず、同一トランザクションも保たれる。
+
+### 3.4 Web 層
+
+- LiveView のファイル構成・命名は `index.ex` / `show.ex` / `form.ex`（coding-rules §2.4 / §9）。ロール別に UI が分かれる場合はサブディレクトリで分ける。
+- JSON API（在庫）は LiveView 対象外。`FoodVaultWeb.Api.V1.*` の Controller と `:api` pipeline で実装する（[§7](#7-在庫-api-の実装)）。
+- PDF 帳票（発送）は LiveView ではなく `FoodShipWeb.ReportController`（[§10](#10-pdf-帳票発送システム)）。
+- 表示用の整形（総バラ数など）は Web 層に書かず、`FoodVault.Utils.Calc` に集約する。Enum 値と表示ラベルの対応は 1 か所に置く（coding-rules §16.3）。
+- 文言は単一言語のため gettext を使わず直書きし、文体を統一する（coding-rules §16.4）。リソース名は用語集に揃える。
+
+---
+
+## 4. ULID 基盤
+
+実装の最初（スキーマを作る前）に次を済ませる。
+
+| 項目 | 決定 |
+| :-- | :-- |
+| 依存 | `ecto_ulid`（`Ecto.ULID` を提供する Hex パッケージ）を採用候補とする。**着手時に Elixir 1.20 / Ecto 3.13 でコンパイルとテストが通ることを最初に確認**し、通らなければ同等の `Ecto.Type`（26 文字の Crockford Base32 ⇔ 16 バイト）を `{App}.ULID` として自前実装する（外部インターフェースは変えない） |
+| 共通スキーママクロ | `{App}.Schema`（`@primary_key {:id, Ecto.ULID, autogenerate: true}`・`@foreign_key_type Ecto.ULID`）を最初に作り、全スキーマが `use {App}.Schema` する。`use Ecto.Schema` の直書きは禁止（coding-rules §5.1） |
+| DB 列 | マイグレーションは `add :id, :binary_id, primary_key: true` ／ FK は `references(:table, on_delete: :nothing, type: :binary_id)`。PostgreSQL の `uuid` 型（16 バイト）で保存される |
+| `config.exs` | `generators` の `binary_id: true` は残す（マイグレーション生成を `:binary_id` にするため）。ただし `phx.gen.*` が出すスキーマは UUID の `:binary_id` なので、生成後に `use {App}.Schema` へ手で置き換える |
+| `phx.gen.auth` | 生成された `User` / `UserToken` のスキーマ・マイグレーション・テストのフィクスチャも ULID 化する |
+| ID の形式検証 | Context の `get_*` は `<<_::208>>`（26 文字）ガードで受ける（coding-rules §4.2）。API は、パスの ID が不正なら 404、ボディの ID が不正なら 422 にし、500 にしない |
+| 並び順 | ULID の `id` 昇順は同一ミリ秒内の生成順を保証しない。先出しの第 3 優先は「順序を一意にするタイブレーク」としてのみ使い、作成順の意味は持たせない |
+
+---
+
+## 5. データベース
+
+| 項目 | 決定 |
+| :-- | :-- |
+| 拡張 | `citext`（`users.email`）。最初のマイグレーションで `CREATE EXTENSION IF NOT EXISTS citext`（`execute/2` の up/down 2 引数形式） |
+| マイグレーション | `{timestamp}_{動詞_対象}.exs`、`def change` を使う。データ移行は `execute(up, down)` の 2 引数形式（coding-rules §14）。**インデックスは `create table` ブロックの外**に書く。NOT NULL 追加は `default:` を付ける（デプロイ中は旧コードが動くため） |
+| 主キー・FK | `id` は ULID（`binary_id` 列）。FK は `on_delete: :nothing`、必須 FK に `null: false` |
+| 列挙 | `Ecto.Enum`（DB 列は `:string`）。ENUM 型は使わない |
+| 日時 | `timestamps(type: :utc_datetime)`。業務日付は `date` 型。JST への変換は表示直前のみ（`Utils.ConvertDatetime`） |
+| 論理削除 | `archived_at`。物理削除しない |
+| 制約 | 不変条件は changeset と **DB の CHECK 制約の両方**で守る。一意制約は changeset の `unique_constraint` と `unsafe_validate_unique` を対で書き、対応する `unique_index`（部分ユニーク含む）を必ず DB に作る（coding-rules §5.7） |
+| 索引 | FK と検索条件に作る（一覧は functional-design §3） |
+| 採番（発送） | `slip_no` / `pick_no` は DB シーケンス。スキーマでは `read_after_writes: true` の読み取り専用フィールドとし、`cast` しない |
+| 接続 | プールサイズ `POOL_SIZE`（既定 10）。同時に長時間のトランザクションを張る処理（CSV の引当は Task で 1 件ずつ）を避ける |
+
+---
+
+## 6. トランザクションと並行制御（在庫側）
+
+### 6.1 トランザクション
+
+- 在庫の更新（入荷・引当・荷崩し・確定・解除・出庫取消・移動・調整）は、**1 つの `Ecto.Multi` を `Repo.transact/1` で実行する単一トランザクション**。途中で失敗したら全体をロールバックする。
+- 可変個の明細・ロットは `Enum.reduce` で Multi を積み、ステップ名は **文字列**（`"lot_#{id}"`）で生成する（atom を動的生成しない、coding-rules §7.3）。
+- 引当アルゴリズムは「ロックしたロット一覧から、純粋関数で引当計画（どのロットから何ケース・何バラ・荷崩しは何ケース）を計算 → 計画を Multi で適用」の 2 段に分けると、読みやすくテストしやすい。不足は明細ごとに集計し、最後に 1 つでもあればロールバック（`{:error, :insufficient_stock, shortages}`）する。
+- `cast_assoc` / `put_assoc` は使わない。
+
+### 6.2 ロック
+
+| 項目 | 実装 |
+| :-- | :-- |
+| 商品行 | 入荷・引当・移動先作成は `items` 行を `lock: "FOR SHARE"` で読む（`item_id` 昇順）。マスタ更新は `lock: "FOR UPDATE"`（入数・期限区分の変更ガードの競合対策） |
+| ロット | `from l in InventoryLot, where: ..., order_by: [asc: l.warehouse_id, asc: l.item_id, asc: l.expiration_date, asc: l.received_date, asc: l.id], lock: "FOR UPDATE"` を **1 クエリで**発行する。操作の途中で追加のロットをロックしない |
+| 順序 | 全操作共通のロックキーは `(warehouse_id, item_id, expiration_date, received_date, id)`。先に `items` の `FOR SHARE`、次にロットの `FOR UPDATE`（`items` → ロットの順を全操作で固定する） |
+| 引当 | 明細を `item_id` 昇順に並べ替え、その商品群のロットを 1 クエリでロックしてから計画を立てる |
+| 確定・解除・出庫取消 | 引当明細の `lot_id` を `IN` で 1 クエリロック |
+| 移動 | 移動先ロットを `INSERT ... ON CONFLICT DO NOTHING`（数量 0）で先に確保し、移動元・移動先の 2 ロットを 1 クエリでロック |
+| 入荷 | `Repo.insert(..., on_conflict: [inc: [case_qty: n, piece_qty: m]], conflict_target: [:warehouse_id, :item_id, :expiration_date, :received_date], returning: true)` で原子的に加算 |
+| 隔離レベル | PostgreSQL 既定の `READ COMMITTED`。二重引当は `FOR UPDATE` と CHECK 制約（`0 <= allocated <= qty`）の二重で防ぐ |
+
+### 6.3 冪等性の実装（API ①）
+
+1. トランザクションの前に、`external_slip_id`（`cancelled` 以外）の既存オーダーを検索し、要求内容の**正規化（`warehouse_id`・`shipment_date`・明細を `item_id` 順に並べた `item_id`/`req_cases`/`req_pieces`/`min_expiration_date`）**を比較する。一致なら既存を 200 で返し、不一致は 409 `idempotency_conflict`。
+2. 新規作成で `unique_constraint`（部分ユニーク索引名を `name:` に指定）違反になった側は、500 にせず、**既存オーダーを再取得して 1 と同じ比較**を行う。
+3. 冪等応答ではオーダー履歴・受払履歴を追加しない。②③④ はすでにその状態なら現状を返し、それ以外の状態は 409 `invalid_state`。
+
+---
+
+## 7. 在庫 API の実装
+
+### 7.1 ルーティングと pipeline
+
+```elixir
+# lib/food_vault_web/router.ex（イメージ）
+pipeline :api do
+  plug :accepts, ["json"]
+  plug FoodVaultWeb.Plugs.ServiceTokenAuth
+end
+
+scope "/api/v1", FoodVaultWeb.Api.V1 do
+  pipe_through :api
+  resources "/shipment_orders", ShipmentOrderController, only: [:create, :show, :index]  # index は ?external_slip_id=
+  post "/shipment_orders/:id/ship", ShipmentOrderController, :ship
+  post "/shipment_orders/:id/cancel", ShipmentOrderController, :cancel
+  post "/shipment_orders/:id/reverse", ShipmentOrderController, :reverse
+  get "/warehouses", WarehouseController, :index
+  get "/items", ItemController, :index
+end
+```
+
+- `ShipmentOrderController` の `index` は `?external_slip_id=` の照会専用（パラメータなしは 422）。
+- ブラウザ用の `:browser` pipeline（CSRF・セッション）は通さない。
+
+### 7.2 サービストークン認証
+
+- `FoodVaultWeb.Plugs.ServiceTokenAuth`（モジュール plug）。`Authorization: Bearer <token>` を読み、設定のトークン一覧のいずれかと **`Plug.Crypto.secure_compare/2`**（定数時間）で比較する。一致しなければ 401 `unauthorized` で `halt`。
+- トークン一覧は環境変数 `INVENTORY_API_TOKENS`（カンマ区切り・複数可）。**ローテーション**は「新トークンを追加（旧と併存）→ 発送側の設定を切り替え → 旧を削除」。
+- トークンの値はログに出さない（`Authorization` ヘッダを出力しない）。
+- 本番は TLS を終端し、`/api` を発送システムの送信元（社内ネットワーク）に限定する（リバースプロキシ）。
+
+### 7.3 エラー形式の統一
+
+- `FoodVaultWeb.Api.FallbackController`（`action_fallback`）で、Context の戻り値を共通形式 `{ "error": "<code>", "message": "<説明>", ...付加情報 }` に変換する。`ErrorJSON` の既定形式（`%{errors: %{detail: ...}}`）は API では使わない。
+- 対応: `{:error, :not_found}` → 404 `not_found`、`{:error, :invalid_state}` → 409 `invalid_state`、`{:error, :idempotency_conflict, order}` → 409（既存の `order_id` と `status` を含む）、`{:error, :insufficient_stock, shortages}` → 422、`{:error, %Ecto.Changeset{}}` → 422 `validation_failed`（`errors` に項目別）。
+- 不正な ID 形式（パス）は 404、ボディの ID は 422。存在しないルートも同じ形式で 404 を返す。
+- 共通のオーダー表現（レスポンス）は `FoodVaultWeb.Api.V1.ShipmentOrderJSON` に 1 か所で定義し、①②③④⑤ から呼ぶ。
+
+---
+
+## 8. 認証・認可の実装
+
+### 8.1 `phx.gen.auth` の取り扱い
+
+- 生成物から **自己登録・マジックリンク・メール確認を取り除き、パスワード認証のみ**にする（在庫・発送の両アプリ）。生成物の削減範囲（`users_tokens` のカラム構成、セッション有効期間の判定が設計の `inserted_at` ベースと一致するか）は、`deps/` 取得後に生成して確認する（[§16](#16-未決事項実装着手時の検証事項)）。
+- ユーザーは管理者が登録する。パスワードは bcrypt、最小 12 文字。ログイン失敗時のエラーは 1 種類（「メールアドレスまたはパスワードが正しくありません。」）。
+- パスワード再設定は管理者が行う運用（メール基盤は使わない）。再設定後は `must_change_password = true`。
+- 初期管理者は seeds（開発）／リリースタスク（本番）で作成する。初期パスワードは `runtime.exs` 経由の環境変数から読み、作成後に `must_change_password = true`。
+- スキーマには `@derive {Inspect, only: [...]}` を付け、`password` / `current_password` は `virtual: true, redact: true`、`hashed_password` は `redact: true`（coding-rules §5.4）。
+
+### 8.2 `current_scope`
+
+現在ユーザーは Phoenix 1.8 の `current_scope`（`current_scope.user`）で扱い、`<Layouts.app current_scope={@current_scope} ...>` に渡す。coding-rules §11.3 の `current_user` は `current_scope.user` と読み替える。assign する場所は plug と `on_mount` の 2 箇所に限る。`current_scope` が無いというエラーが出たら、ルートを正しい `live_session` に移し、`Layouts.app` に渡す（各アプリの `AGENTS.md`）。
+
+### 8.3 認可の 3 層
+
+| 層 | 実装 |
+| :-- | :-- |
+| ① HTTP plug | `require_authenticated_user`（全ロール）／`require_authenticated_admin_user`（`admin`）。PDF 帳票の Controller は `staff` 以上に限定 |
+| ② LiveView `on_mount` | `:ensure_authenticated`（全ロール）／`:ensure_authenticated_staff`（`staff` 以上）／`:ensure_authenticated_admin`（`admin`）。plug と **同じ強さのフックを `live_session` に必ず指定**する（LiveView 間遷移は plug を通らないため。coding-rules §8.3） |
+| ③ イベント単位 | 同一画面に複数ロールが入る画面は `handle_event` の先頭で `Permission.can?/2` を検査し、不許可なら `put_flash(:error, "権限がありません。")`。**テンプレートの `:if` だけで隠さない**（coding-rules §11.5） |
+
+- 判定は `{App}.Utils.Permission.can?(user, action)` に一本化する（ステートレスな関数モジュール）。権限表と 1 対 1 に対応し、ボタン表示とイベント処理の両方で同じ関数を呼ぶ。上位ロールは下位ロールの操作を含む（`admin` ⊃ `staff` ⊃ `viewer`）。
+- 緊急操作（発送システム起源オーダーの画面での確定・引当解除）は、`Permission.can?/2` に専用のアクション（例 `:emergency_ship_order`）を持たせ、`admin` のみ許可する。
+- ユーザー管理ルール（最後の `admin` の降格・アーカイブ禁止、自分自身のロール変更・アーカイブ禁止）は Context（`Accounts`）で強制する。
+- パスワード変更・ロール変更・アーカイブ時は、そのユーザーの全 `users_tokens`（`session`）を同一トランザクションで削除する。
+- ルーティング: 参照・業務画面は `/inventory_lots` 等の一般パス、`admin` 専用画面は `/management/...`、認証系は `/users/log_in` 等（coding-rules §8.4）。
+
+---
+
+## 9. 発送 → 在庫の連携クライアントと非同期処理
+
+### 9.1 `FoodShip.Inventory.Client`
+
+- `Req` で在庫 API を呼ぶ外部境界モジュール。DB を持たない。設定は `runtime.exs` でモジュール名をキーに集約し、`System.get_env` をアプリケーションコードから直接呼ばない（coding-rules §13）。
+- **リトライ**: `retry: :transient`（Req の既定 `:safe_transient` は GET / HEAD 以外を再試行しないため、POST の引当・確定・解除・出庫取消でも再試行するには明示が必要）、`max_retries: 3`、待機 1 秒・2 秒・4 秒（`retry_delay`）。対象は接続エラー・タイムアウトと 408 / 429 / 500 / 502 / 503 / 504。401 / 404 / 409 / 422 は再試行しない。
+- **タイムアウト**: 接続 5 秒・受信 15 秒（設定値）。
+- 状態を変える呼び出しは **`operator` を必ず付ける**。応答は、成功・在庫不足・各エラー（401/404/409/422）・通信失敗を判別できるタグ付きタプルに変換して Context に返す。
+- 応答の引当バラ数の合計が `total_piece_qty` と一致するかの検証は、`Client` ではなく `ShippingSlips`（Context）が行う。
+
+### 9.2 外部 I/O とトランザクション
+
+在庫側の状態はローカル DB のトランザクションでロールバックできないため、**在庫 API の呼び出しはローカル DB のトランザクションの外**で行う（coding-rules §7.2 の `Multi.run` 方式は採らない）。手順は、先にローカル保存（`pending`）→ API 呼び出し → 結果でローカル状態を更新。失敗時は冪等なリトライ・再引当で復旧する。
+
+### 9.3 非同期処理（`Task` ＋ `handle_info`）
+
+- 画面からの在庫 API 呼び出し（登録時の引当・再引当・梱包完了・取消）は LiveView のイベントハンドラ内で同期的に待たず、`Task` ＋ `handle_info` で結果を受ける（coding-rules §9.9）。実行中は対象の行・ボタンを無効化して二重送信を防ぐ。
+- CSV 取込: **保存（全行 `pending` の一括 INSERT）は Task の前に完了**し、Task は引当 API の呼び出しだけを担う。`Task.start`（監視なし）のため、アプリ再起動などで中断しても、`pending` の行を一括再引当で復旧できる。進捗を DB に持たない（`pending` の件数が進捗の代わり）。
+- 一括梱包完了・一括再引当は 1 伝票ずつ順に処理し、進捗（完了件数／全件）と伝票ごとの成否を `handle_info` で表示する。
+- 監査ログは `Task` の中で出さず、結果を受ける `handle_info` の成功節で出す（`Task` は別プロセスのため `socket` の情報が取れない）。
+
+---
+
+## 10. PDF 帳票（発送システム）
+
+### 10.1 実装方式
+
+- 配信は LiveView ではなく **Controller**（`FoodShipWeb.ReportController`：`total_pick/2`・`work_order/2`・`total_pick_bundle/2`）。認可は HTTP plug で `staff` 以上に限定する（`on_mount` は不要）。
+- HTML テンプレートは `FoodShipWeb.ReportHTML`（HEEx）で作り、A4 縦・日本語フォント（Noto Sans JP）で PDF 化する。生成は **`FoodShip.Utils.Pdf` に閉じ込める**（外部 I/O の境界。テストではこのモジュールだけをモックしてよい）。
+- 推奨ライブラリは `ChromicPDF`（HTML/CSS をそのままレイアウトでき、日本語・罫線表に強い）。`Dockerfile.dev` への Chromium と `fonts-noto-cjk` の追加、`mix.exs` への依存追加、アプリ起動時の supervisor 登録が必要。環境構築は別セッションで実施し、ライブラリの最終決定はその際に行う。
+- 帳票は **都度生成して保存しない**。ピック表の集計は `TotalPicks` のクエリ関数（`defp *_query/2` に分割）で都度算出し、テンプレートに計算式を書かない（coding-rules §6・§10.7）。日時は JST。
+
+### 10.2 前提（環境構築セッションでも守る）
+
+| 項目 | 決定 |
+| :-- | :-- |
+| 外部リソース | 読み込まない。テンプレートに差し込む値は HEEx のエスケープに限り、画像・フォント・スクリプト・CSS の外部 URL を書かない。日本語フォントはイメージにインストールした `fonts-noto-cjk`。商品名・メーカー名（在庫側由来）・発注元名（CSV 由来）が入るため、レビューで外部 URL が無いことを確認する |
+| サンドボックス | `docker-compose.yml` の開発構成は root（`target: build_as_root`）のため、**開発環境に限り** `no_sandbox: true` を使う。**本番は root 以外のユーザーで実行し、`no_sandbox` は使わない** |
+| 負荷の上限 | ChromicPDF のセッションプール数と 1 回あたりのタイムアウトを設定値にし、同時に生成できる件数を制限する（超過時は待たせる／「混み合っています」を表示）。束ね PDF が大きい場合は `Task` ＋ `handle_info` で非同期化する |
+| 表示確認 | 日本語・罫線・A4 縦への収まり・改ページを実機の PDF で確認する手順を、現場確認の前に用意する |
+
+---
+
+## 11. 設定と秘密情報
+
+- 秘密情報（トークン・DB パスワード・初期管理者パスワード）は **コンパイル時 config（`config.exs` / `dev.exs` / `prod.exs`）に置かず `runtime.exs`** に置く。開発用のデフォルトは「環境変数 || 開発用デフォルト」で書く。
+- 必須値は `System.get_env("X") || raise "..."` で **起動時に落とす**。任意値は `System.get_env("X", "default")`。
+- `System.get_env` をアプリケーションコードから直接呼ばない。設定はモジュール名をキーに `runtime.exs` に集約し、利用側は **関数経由**で解決する（`Application.get_env(:app, __MODULE__)`）。モジュール属性（`@x Application.get_env(...)`）で読まない（コンパイル時に固定されるため）。
+
+環境変数（名前は命名案。実装時に確定）:
+
+| アプリ | 変数 | 内容 | 必須 |
+| :-- | :-- | :-- | :-- |
+| 共通 | `DATABASE_URL`（本番）/ `PGHOST`・`PGPASSWORD`（開発） | DB 接続 | 本番は必須 |
+| 共通 | `SECRET_KEY_BASE` / `PHX_HOST` / `PORT` / `POOL_SIZE` | Phoenix 標準 | 本番は必須（`POOL_SIZE` は任意） |
+| 共通 | `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` | 初期管理者の作成（seeds・リリースタスク） | 初期作成時 |
+| 在庫 | `INVENTORY_API_TOKENS` | サービストークン（カンマ区切り・複数可） | 必須 |
+| 発送 | `INVENTORY_API_BASE_URL` | 在庫 API のベース URL（Compose 内は `http://food_vault_web:4000`） | 必須 |
+| 発送 | `INVENTORY_API_TOKEN` | 在庫 API 用のサービストークン | 必須 |
+| 発送 | `INVENTORY_WAREHOUSE_ID` | 対象倉庫 ID（在庫側 `GET /api/v1/warehouses` で確認） | 必須 |
+| 発送 | `INVENTORY_API_CONNECT_TIMEOUT_MS` / `INVENTORY_API_RECEIVE_TIMEOUT_MS` | タイムアウト（既定 5000 / 15000） | 任意 |
+| 発送 | PDF の設定（プール数・タイムアウト） | ChromicPDF（[§10](#10-pdf-帳票発送システム)） | 任意 |
+
+---
+
+## 12. ログと監査
+
+- **Logger はカテゴリ付きのラッパー経由**（`{App}.Utils.Logger`）。カテゴリは `@categories` にホワイトリスト化し、未定義カテゴリは開発環境で例外にする。本番は JSON 形式で出力し、メタデータに `request_id` / `remote_ip` / `mfa` / `file` / `line` を含める。**バッチ処理は開始と終了で必ずログを出す**。
+- **操作ログ**（`OperationLog`）: Web 層から create / update / delete を呼ぶとき、「誰が・いつ・どのページで・どのデータで・何をしたか」を 1 行で残す。**書き込みが成功したときのみ**出力し、`Task` の中では出さず `handle_info` の成功節で出す。メッセージは「ます形＋句点」で、用語は用語集に揃える。
+- **機微データのマスクは出力側で自動化**する。`redact: true` のフィールドと `@redact_keys`（`token` / `password` など）、仮想フィールド・未ロードのアソシエーション・`__meta__` を `normalize/1` で除外する。呼び出し側で `Map.drop` する運用にしない。
+- ログイン成功・失敗は `:log_in` カテゴリ。サービストークンの値と `Authorization` ヘッダは出力しない。
+- **業務上の証跡は DB が担う**（在庫: `inventory_transactions` と `shipment_order_events`、発送: 伝票の `*_by_user_id` / `*_at` / `reverse_reason`）。Logger は補助で、ログのローテーション後も誰がいつ何をしたかを DB から追える。
+
+---
+
+## 13. テスト戦略
+
+| 項目 | 方針 |
+| :-- | :-- |
+| 配置・命名 | `test/` は `lib/` をミラーする。Context テストの `describe` は「関数名/アリティ」、LiveView は画面名。`test` は日本語の説明（coding-rules §15.1–15.2） |
+| フィクスチャ | Context の公開 API 経由で作る（`Repo.insert` で直接作らない）。FK はデフォルトに入れない（coding-rules §15.3） |
+| 非同期 | `async` は既定 false（DB 共有）。DB に触らない純関数テストだけ `async: true`。`mix test` のエイリアスで毎回 DB を再作成 |
+| mock の範囲 | 外部 I/O 境界のみ。**発送の `FoodShip.Inventory.Client`**（HTTP は `Req.Test` のスタブで差し替えてよい）と **`FoodShip.Utils.Pdf`**。自作の Context は mock しない |
+| 成功系と失敗系 | 対で書き、失敗時のロールバックまで検証する |
+| LiveView | 画面の表示と DB の書き込みの両方を検証する（coding-rules §15.6） |
+
+**必須のテスト観点（在庫側）**:
+
+- 先出し順（期限日 → 入荷日 → ロット ID）と、期限切れ・最低許容期限日未満のロットの除外
+- 荷崩しの算術（`k` ケース、1 ロット 1 履歴行）、荷崩しが引当解除・出庫取消で戻らないこと
+- 在庫不足でのロールバック（荷崩しも元に戻る）と、不足の全明細分の返却
+- **並行性**: 同じ商品に対する同時引当で引当済数が現在庫を超えないこと、複数明細（商品順が逆）・A→B と B→A の同時移動でデッドロックしないこと（複数プロセスで検証）
+- 冪等性: 内容一致の再送で 200、不一致で 409、同時 POST でも 500 にならないこと、②③④ の冪等 200 で履歴が増えないこと
+- マスタ規則: ロットがある商品の入数・期限区分の変更拒否と、入荷との競合、アーカイブ可否
+- 認可: 各 API・画面で、ロールごとの許可・拒否（`Permission.can?/2` と `handle_event` の両方）
+- `transfer_out` / `transfer_in` が必ず対で記録されること
+
+**必須のテスト観点（発送側）**:
+
+- 再引当の手順（既存オーダーの照会 → 解除 → 引当 → 引当合計の検証）、解除失敗後の再引当、引当合計の不一致
+- `Inventory.Client` の応答別（成功・在庫不足・401・404・409 `invalid_state`・409 `idempotency_conflict`・422・通信失敗）と、`allocation_error` の保存
+- CSV 取込: 検証エラー時の全体不取込、`client_slip_no` の重複・空欄、保存後の中断と一括再引当による復旧
+- トータルピックの作成（二重ピックの防止、同時作成）、`outdated` の遷移と再発行前の PDF 拒否
+- ステータスと連動する CHECK 制約、部分ユニーク（`cancelled` / `reversed` の除外）
+- 認可: `admin` のみの操作（梱包後取消・マスタ編集・ユーザー管理）
+
+---
+
+## 14. 開発環境・品質ゲート・CI
+
+- 開発コマンドは **コンテナ経由**（`docker compose run --rm {service} mix ...`）。`Makefile` の `setup` / `mix_compile` / `mix_format` / `mix_credo` / `mix_test` / `mix_test_cover` / `mix_clean` を使う。
+- **品質ゲート**: ① `mix compile --warnings-as-errors --force`、② `mix format`、③ `mix credo --all`、④ `mix test` を 1 つの `check` にまとめ、プッシュ前に全部パスさせる。CI でも同じ `check` を回す。
+- 現状の不足（実装着手時に整備する）:
+  - `Makefile` に `check` ターゲットが無い（`mix_compile` / `mix_format` / `mix_credo` / `mix_test` のみ）。
+  - 両アプリの `mix.exs` の `deps` に `credo` が無く、`.credo.exs` もリポジトリに無い（`mix_credo` は現状動かない）。`mix credo gen.config` で生成して置く。
+  - `mix.exs` の `precommit` エイリアス（`compile --warnings-as-errors` / `deps.unlock --unused` / `format` / `test`）と `check` の関係を揃える。
+  - PR ワークフロー（GitHub Actions）が無い。lint と test を回すワークフローを追加する。
+- `.formatter.exs` は `import_deps`（`:ecto` / `:ecto_sql` / `:phoenix`）と HEEx フォーマッタ（`Phoenix.LiveView.HTMLFormatter`）を設定し、`inputs` に `heex` を含める。
+- `mix test` は毎回 DB を再作成する（`ecto.drop` / `ecto.create` / `ecto.migrate` を alias に含める）。
+
+---
+
+## 15. 非機能要件の実現方針
+
+[product-requirements.md](product-requirements.md) の非機能要件と、実現手段の対応。数値目標は「設計目標（案）」で、実装後に実測して見直す。
+
+| 要件 | 実現手段 |
+| :-- | :-- |
+| 引当 API の応答（95 パーセンタイル 1 秒以内） | ロットの 1 クエリロック、荷崩しの算術化（1 UPDATE）、`(warehouse_id, item_id, expiration_date, received_date)` の複合ユニーク索引を先出しの並びに流用 |
+| 作業画面の 2 秒以内表示（1 日 1,000 伝票） | `(scheduled_ship_date, status)` 索引、一覧のページネーション／日付タブ単位の読み込み、引当ロット明細の事前結合 |
+| CSV 1,000 行の取込 30 秒・引当完了 15 分 | 保存を一括 INSERT（引当と分離）、引当は Task で 1 件ずつ（API の冪等・リトライと整合） |
+| PDF 50 伝票 30 秒 | ChromicPDF のプール数・タイムアウトの設定、必要に応じ非同期化 |
+| データ不整合の防止 | 単一トランザクション、DB の CHECK 制約、ロックキー順の固定、冪等性（内容一致判定） |
+| 在庫 API の一時障害の吸収 | `retry: :transient` で最大 3 回（1・2・4 秒）、`pending` での保存、`allocation_error` の区別、一括再引当 |
+| 監査 | `inventory_transactions` / `shipment_order_events` / 伝票の `*_by_user_id`、`operator` の必須化 |
+| セキュリティ | 認可 3 層、サービストークン（定数時間比較・複数・TLS・送信元制限）、`redact: true`、秘密情報は `runtime.exs`、PDF の外部リソース禁止 |
+| 在庫 0 ロットの肥大化 | 当面は行を残す。運用開始後にアーカイブ方針を決める（[§16](#16-未決事項実装着手時の検証事項)） |
+
+---
+
+## 16. 未決事項（実装着手時の検証事項）
+
+| # | 項目 | 内容 |
+| :-- | :-- | :-- |
+| 1 | ULID 依存の採否 | `ecto_ulid` が Elixir 1.20 / Ecto 3.13 でコンパイル・テストできるかを最初に確認。不可なら自前の `{App}.ULID` |
+| 2 | `phx.gen.auth` 生成物の削減範囲 | `deps/` 取得後に生成して確認。`users_tokens` のカラム構成、セッション有効期間の判定が設計（`inserted_at` ベース）と一致するか。ULID 化の手順 |
+| 3 | 本番の構成 | 本番 Dockerfile・リリース・デプロイ先・リバースプロキシ（TLS、`/api` の送信元制限）・Chromium の本番構成が未定 |
+| 4 | PDF のライブラリ最終決定 | `ChromicPDF` を前提に、環境構築セッションで確定。サンドボックス、プール数、タイムアウト |
+| 5 | 品質ゲートの整備 | `check` ターゲット、`credo` 依存と `.credo.exs`、PR ワークフロー |
+| 6 | 環境変数の命名の確定 | §11 の命名案を実装時に確定し、`runtime.exs` に反映 |
+| 7 | 在庫 0 ロットの整理 | 長期運用での肥大化対策（アーカイブなど）。運用開始後に決める |
+| 8 | ログイン試行制限・セッション期間・「ログインしたままにする」 | 本バージョン対象外。`phx.gen.auth` の既定（remember me あり）を踏襲するか |
