@@ -43,7 +43,7 @@ docs/
 ├── functional-design.md       # 機能設計書（機能・データ・処理・画面・API）
 ├── architecture.md            # 技術仕様書（技術選定・実装方針）
 ├── repository-structure.md    # 本書
-├── development-guidelines.md  # 開発ガイドライン［計画］
+├── development-guidelines.md  # 開発ガイドライン
 ├── glossary.md                # ユビキタス言語定義
 ├── coding-rules.md            # コーディング規約（[必須] / [推奨] 付き）
 └── ideas/                     # 下書き・アイデア・批判的レビュー
@@ -298,7 +298,6 @@ test/
 | 2 | `Makefile` に `check` ターゲットが無い。両アプリに `credo` 依存と `.credo.exs` が無い（[architecture.md §14](architecture.md#14-開発環境品質ゲートci)） |
 | 3 | PR ワークフロー（`.github/workflows/`）が無い。lint と test を回すワークフローを追加する |
 | 4 | `.steering/` と `mock/` はまだ無い。作業の開始時に作成する |
-| 5 | `docs/development-guidelines.md` はまだ無い（次に作成する） |
 
 ---
 
