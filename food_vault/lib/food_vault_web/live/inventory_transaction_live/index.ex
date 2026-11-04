@@ -72,7 +72,7 @@ defmodule FoodVaultWeb.InventoryTransactionLive.Index do
               <th class="text-right">バラ</th>
               <th>備考</th>
               <th>操作者</th>
-              <th>移動ペア</th>
+              <th>オーダー / 移動ペア</th>
             </tr>
           </thead>
           <tbody>
@@ -90,7 +90,16 @@ defmodule FoodVaultWeb.InventoryTransactionLive.Index do
               <td class="text-right">{tx.piece_diff}</td>
               <td>{tx.note}</td>
               <td>{(tx.user && tx.user.name) || tx.operator}</td>
-              <td>{tx.transfer_id}</td>
+              <td>
+                <.link
+                  :if={tx.shipment_order_id}
+                  navigate={~p"/shipment_orders/#{tx.shipment_order_id}"}
+                  class="link"
+                >
+                  オーダー
+                </.link>
+                {tx.transfer_id}
+              </td>
             </tr>
             <tr :if={@page.entries == []}>
               <td colspan="10" class="text-center text-base-content/60">履歴がありません。</td>

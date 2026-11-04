@@ -66,6 +66,18 @@ defmodule FoodVaultWeb.Router do
     post "/users/update_password", UserSessionController, :update_password
   end
 
+  ## staff 以上
+
+  scope "/", FoodVaultWeb do
+    pipe_through [:browser, :require_authenticated_staff_user]
+
+    live_session :require_authenticated_staff,
+      on_mount: [{FoodVaultWeb.UserAuth, :ensure_authenticated_staff}] do
+      live "/inventory_receipts/new", InventoryReceiptLive.Form, :new
+      live "/shipment_orders/new", ShipmentOrderLive.Form, :new
+    end
+  end
+
   ## 全ロール(ログイン済み)
 
   scope "/", FoodVaultWeb do
@@ -78,21 +90,12 @@ defmodule FoodVaultWeb.Router do
       live "/inventory_lots", InventoryLotLive.Index, :index
       live "/inventory_lots/:id", InventoryLotLive.Show, :show
       live "/inventory_transactions", InventoryTransactionLive.Index, :index
+      live "/shipment_orders", ShipmentOrderLive.Index, :index
+      live "/shipment_orders/:id", ShipmentOrderLive.Show, :show
 
       live "/masters/makers", MakerLive.Index, :index
       live "/masters/warehouses", WarehouseLive.Index, :index
       live "/masters/items", ItemLive.Index, :index
-    end
-  end
-
-  ## staff 以上
-
-  scope "/", FoodVaultWeb do
-    pipe_through [:browser, :require_authenticated_staff_user]
-
-    live_session :require_authenticated_staff,
-      on_mount: [{FoodVaultWeb.UserAuth, :ensure_authenticated_staff}] do
-      live "/inventory_receipts/new", InventoryReceiptLive.Form, :new
     end
   end
 

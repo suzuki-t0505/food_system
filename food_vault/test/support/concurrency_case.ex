@@ -13,7 +13,7 @@ defmodule FoodVault.ConcurrencyCase do
   alias Ecto.Adapters.SQL.Sandbox
   alias FoodVault.Repo
 
-  @tables ~w(inventory_transactions inventory_lots items makers warehouses users_tokens users)
+  @tables ~w(shipment_order_events shipment_allocations shipment_order_lines shipment_orders inventory_transactions inventory_lots items makers warehouses users_tokens users)
 
   using do
     quote do

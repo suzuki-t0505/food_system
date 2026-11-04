@@ -82,6 +82,7 @@ defmodule FoodVaultWeb.Layouts do
       >
         入荷登録
       </.link>
+      <.link navigate={~p"/shipment_orders"} class="btn btn-sm btn-ghost">出庫オーダー</.link>
       <.link navigate={~p"/masters/makers"} class="btn btn-sm btn-ghost">メーカー</.link>
       <.link navigate={~p"/masters/warehouses"} class="btn btn-sm btn-ghost">倉庫</.link>
       <.link navigate={~p"/masters/items"} class="btn btn-sm btn-ghost">商品</.link>

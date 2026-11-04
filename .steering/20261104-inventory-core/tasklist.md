@@ -36,18 +36,18 @@
 
 ## 3. 単位 C: 出庫オーダーの引当(F-V3 前半)
 
-- [ ] migration: `shipment_orders`・`shipment_order_lines`・`shipment_allocations`・`shipment_order_events`(部分ユニーク・CHECK・追記専用トリガー)
-- [ ] スキーマ 4 種と `AllocationPlan`(純粋関数)とそのテスト
-- [ ] `ShipmentOrders.allocate_shipment_order/2`(冪等、検証、`FOR SHARE`/`FOR UPDATE`、荷崩し、ロールバック、不足の全明細分)、`list_shipment_orders/1`・`get_shipment_order!/1`・`change_shipment_order/1`
-- [ ] フィクスチャ(`order_fixture`)
-- [ ] 画面: `shipment_order_live/index.ex`・`show.ex`(閲覧のみ)・`form.ex`(登録)
-- [ ] テスト(先出し順・期限条件・荷崩し・不足・冪等・並行・デッドロック、LiveView のロール別)、品質ゲート、コミット・プッシュ
+- [x] migration: `shipment_orders`・`shipment_order_lines`・`shipment_allocations`・`shipment_order_events`(部分ユニーク・CHECK・追記専用トリガー)
+- [x] スキーマ 4 種、`Request`(入力の検証・正規化)、`AllocationPlan`(純粋関数)とそのテスト
+- [x] `ShipmentOrders.allocate_shipment_order/2`(冪等、検証、`FOR SHARE`/`FOR UPDATE`、荷崩し、ロールバック、不足の全明細分)、`list_shipment_orders/1`・`get_shipment_order!/1`・`list_allocating_orders/1`(`change_shipment_order/1` は作らない。明細が可変個で `cast_assoc` を使わないため、入力検証は `Request.normalize/1` がエラー一覧を返す)
+- [x] フィクスチャ(`order_fixture`)
+- [x] 画面: `shipment_order_live/index.ex`・`show.ex`(閲覧のみ)・`form.ex`(登録)
+- [x] テスト(先出し順・期限条件・荷崩し・不足・冪等・並行・デッドロック、LiveView のロール別)、品質ゲート、コミット・プッシュ
 
 ## 4. 単位 D: 出庫確定・引当解除(F-V3 後半)
 
-- [ ] `ship_shipment_order/2`・`cancel_shipment_order/3`(冪等、起源による拒否、受払・オーダー履歴)
-- [ ] `show.ex` に確定・取消ボタンと `handle_event`(権限検査、`OperationLog`)、発送システム起源の警告
-- [ ] テスト(数量・履歴・冪等・引当明細の保持・起源拒否・LiveView のロール別)、品質ゲート、コミット・プッシュ
+- [x] `ship_shipment_order/2`・`cancel_shipment_order/3`(冪等、起源による拒否、受払・オーダー履歴)
+- [x] `show.ex` に確定・取消ボタンと `handle_event`(権限検査、`OperationLog`)、発送システム起源の警告
+- [x] テスト(数量・履歴・冪等・引当明細の保持・起源拒否・LiveView のロール別)、品質ゲート、コミット・プッシュ
 
 ## 5. 単位 E: 棚卸調整(F-V5)
 

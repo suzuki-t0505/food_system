@@ -224,6 +224,38 @@ defmodule FoodVault.Inventories do
   end
 
   @doc """
+  引当の対象になりうるロットを、1 クエリで `FOR UPDATE` ロックして返す(ロックキー順)。
+
+  指定倉庫・商品のロットのうち、期限日が `from_date` 以降で、有効在庫(現在庫 − 引当済)が
+  あるものだけをロックする。明細ごとの最低許容期限日は、呼び出し側が結果を絞り込んで適用する
+  (明細ごとに条件が違っても 1 クエリでロックするため)。
+  """
+  def lock_allocatable_lots(warehouse_id, item_ids, from_date) do
+    InventoryLot
+    |> where([l], l.warehouse_id == ^warehouse_id and l.item_id in ^item_ids)
+    |> where([l], l.expiration_date >= ^from_date)
+    |> where([l], l.case_qty > l.allocated_case_qty or l.piece_qty > l.allocated_piece_qty)
+    |> lock_key_order()
+    |> lock("FOR UPDATE")
+    |> Repo.all()
+  end
+
+  @doc """
+  ロットの数量を絶対値で更新する。ロック済みの値から計算した値を渡す。
+
+  `changes` は `case_qty`・`piece_qty`・`allocated_case_qty`・`allocated_piece_qty` の
+  キーワード。CHECK 制約に違反する値はデータベースが拒否する。
+  """
+  def update_lot_quantities(lot_id, changes) do
+    {1, _} =
+      InventoryLot
+      |> where([l], l.id == ^lot_id)
+      |> Repo.update_all(set: Keyword.put(changes, :updated_at, DateTime.utc_now(:second)))
+
+    :ok
+  end
+
+  @doc """
   受払履歴を 1 行追加する。`actor` と `type` は必須、`opts` に
   `:shipment_order_id`・`:transfer_id`・`:note` を渡せる。
   """
