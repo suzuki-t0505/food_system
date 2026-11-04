@@ -95,7 +95,9 @@ lib/
 │   ├── accounts.ex                     # Context: ユーザー・認証・ロール
 │   ├── accounts/
 │   │   ├── user.ex
-│   │   └── user_token.ex
+│   │   ├── user_token.ex
+│   │   └── scope.ex                    # current_scope（user を持つ）
+│   ├── release.ex                      # リリースタスク（初期管理者の作成）
 │   ├── makers.ex  /  makers/maker.ex
 │   ├── warehouses.ex  /  warehouses/warehouse.ex
 │   ├── items.ex  /  items/item.ex
@@ -118,7 +120,7 @@ lib/
 │       └── convert_datetime.ex         # UTC → JST 変換
 └── food_vault_web/
     ├── endpoint.ex / router.ex / telemetry.ex / gettext.ex   # ［現状］
-    ├── user_auth.ex                    # plug と on_mount（current_scope の assign）［計画］
+    ├── user_auth.ex                    # plug と on_mount（current_scope の assign）［現状：段階 1 で実装済み］
     ├── components/
     │   ├── core_components.ex          # **改変しない** ［現状］
     │   ├── layouts.ex  /  layouts/root.html.heex   # ［現状］
@@ -135,7 +137,7 @@ lib/
     │   ├── logger_metadata.ex          # Logger メタデータに remote_ip を設定
     │   └── service_token_auth.ex       # サービストークン認証（定数時間比較）［計画］
     └── live/
-        ├── user_session_live/ …        # ログイン・パスワード変更
+        ├── user_session_live/          # ログイン・パスワード変更（login.ex / password.ex）［現状］
         ├── inventory_lot_live/         # 在庫一覧・ロット詳細（index.ex / show.ex）
         ├── inventory_receipt_live/     # 入荷登録（form.ex）
         ├── shipment_order_live/        # 出庫オーダー（index.ex / show.ex / form.ex）
@@ -144,7 +146,7 @@ lib/
         └── management/                 # admin 専用（/management/...）
             ├── inventory_adjustment_live/    # 棚卸調整・入荷訂正・荷まとめ
             ├── maker_live/ warehouse_live/ item_live/
-            └── user_live/
+            └── user_live/              # ユーザー管理（index.ex / form.ex）［現状］
 ```
 
 ### 3.3 `priv/`
@@ -153,7 +155,7 @@ lib/
 priv/
 ├── repo/
 │   ├── migrations/             # {timestamp}_{動詞_対象}.exs（FK の依存順に作成）
-│   └── seeds.exs               # 開発用の初期データ（初期管理者を含む）［現状：雛形］
+│   └── seeds.exs               # 開発用の初期データ（初期管理者を含む）［現状：初期管理者を作成］
 ├── static/                     # ビルド成果物（git 管理外）
 └── gettext/                    # ［現状］。単一言語のため業務文言には使わない
 ```
@@ -199,7 +201,8 @@ lib/
 ├── food_ship/
 │   ├── application.ex / repo.ex / mailer.ex   # ［現状］
 │   ├── schema.ex                       # {App}.Schema マクロ（ULID 主キー）
-│   ├── accounts.ex  /  accounts/{user,user_token}.ex
+│   ├── accounts.ex  /  accounts/{user,user_token,scope}.ex
+│   ├── release.ex                      # リリースタスク（初期管理者の作成）
 │   ├── clients.ex  /  clients/client.ex
 │   ├── shipping_items.ex  /  shipping_items/shipping_item.ex
 │   ├── expiration_rules.ex  /  expiration_rules/expiration_rule.ex
@@ -218,7 +221,7 @@ lib/
 │       └── pdf.ex                      # PDF 生成（ChromicPDF）の境界
 └── food_ship_web/
     ├── endpoint.ex / router.ex / telemetry.ex / gettext.ex   # ［現状］
-    ├── user_auth.ex                    # ［計画］
+    ├── user_auth.ex                    # ［現状：段階 1 で実装済み］
     ├── plugs/logger_metadata.ex        # Logger メタデータに remote_ip を設定
     ├── components/                     # core_components.ex は改変しない
     ├── controllers/
@@ -226,12 +229,12 @@ lib/
     │   ├── report_html.ex  /  report_html/*.heex   # 帳票テンプレート（A4 縦）
     │   └── error_*.ex / page_*.ex      # ［現状］
     └── live/
-        ├── user_session_live/ …
+        ├── user_session_live/          # ログイン・パスワード変更［現状］
         ├── shipping_slip_live/         # 出荷日別の作業画面（index.ex）／伝票登録（form.ex）／CSV 取込
         ├── total_pick_live/            # 一覧・詳細（index.ex / show.ex）
         └── management/                 # admin 専用
             ├── client_live/ shipping_item_live/ expiration_rule_live/
-            └── user_live/
+            └── user_live/              # ユーザー管理（index.ex / form.ex）［現状］
 ```
 
 ### 4.2 `priv/repo/migrations/`（作成順）

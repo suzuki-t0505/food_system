@@ -231,10 +231,10 @@ end
 
 ### 8.1 `phx.gen.auth` の取り扱い
 
-- 生成物から **自己登録・マジックリンク・メール確認を取り除き、パスワード認証のみ**にする（在庫・発送の両アプリ）。生成物の削減範囲（`users_tokens` のカラム構成、セッション有効期間の判定が設計の `inserted_at` ベースと一致するか）は、`deps/` 取得後に生成して確認する（[§16](#16-未決事項実装着手時の検証事項)）。
+- 生成物から **自己登録・マジックリンク・メール確認・メール変更・配信（`UserNotifier`）・sudo mode を取り除き、パスワード認証のみ**にした（在庫・発送の両アプリ）。`users_tokens` は `session` コンテキストのみで、生成物の `sent_to`・`authenticated_at` は持たない。セッション有効期間は `inserted_at` ベースで、14 日（7 日経過で再発行）。「ログインしたままにする」（remember me、cookie 14 日）は `phx.gen.auth` の既定を残している。セッション cookie は署名のみで暗号化しない（中身はランダムなトークンのみで、失効は DB の行削除で行う）。
 - ユーザーは管理者が登録する。パスワードは bcrypt、最小 12 文字。ログイン失敗時のエラーは 1 種類（「メールアドレスまたはパスワードが正しくありません。」）。
 - パスワード再設定は管理者が行う運用（メール基盤は使わない）。再設定後は `must_change_password = true`。
-- 初期管理者は seeds（開発）／リリースタスク（本番）で作成する。初期パスワードは `runtime.exs` 経由の環境変数から読み、作成後に `must_change_password = true`。
+- 初期管理者は seeds（開発）／リリースタスク（本番）で作成する。初期パスワードは `runtime.exs` 経由の環境変数から読み、作成後に `must_change_password = true`。実装は `{App}.Accounts.ensure_initial_admin/0`（冪等。有効な `admin` がいれば何もしない）と、それを呼ぶ `{App}.Release.create_initial_admin/0`（本番イメージへの組み込みは §16 #3）、`seeds.exs`（`{App}.Release.run/0`）。設定キーは `config :{app}, {App}.Accounts.InitialAdmin`（開発は `admin@example.com` / `admin-password-dev` が既定。本番は環境変数が必須で、未設定ならタスクが報告して終了する）。
 - スキーマには `@derive {Inspect, only: [...]}` を付け、`password` / `current_password` は `virtual: true, redact: true`、`hashed_password` は `redact: true`（coding-rules §5.4）。
 
 ### 8.2 `current_scope`
@@ -253,7 +253,9 @@ end
 - 緊急操作（発送システム起源オーダーの画面での確定・引当解除）は、`Permission.can?/2` に専用のアクション（例 `:emergency_ship_order`）を持たせ、`admin` のみ許可する。
 - ユーザー管理ルール（最後の `admin` の降格・アーカイブ禁止、自分自身のロール変更・アーカイブ禁止）は Context（`Accounts`）で強制する。
 - パスワード変更・ロール変更・アーカイブ時は、そのユーザーの全 `users_tokens`（`session`）を同一トランザクションで削除する。
-- ルーティング: 参照・業務画面は `/inventory_lots` 等の一般パス、`admin` 専用画面は `/management/...`、認証系は `/users/log_in` 等（coding-rules §8.4）。
+- ルーティング: 参照・業務画面は `/inventory_lots` 等の一般パス、`admin` 専用画面は `/management/...`、認証系は `/users/log_in` 等（coding-rules §8.4）。実装済みのルートは `/users/log_in`・`/users/log_out`・`/users/password`（パスワード変更。全ロール）・`/management/users`（`admin` 専用）。`/` も認証必須。
+- `must_change_password` が true のユーザーは、plug（`require_authenticated_user`）と `on_mount`（`:ensure_authenticated*`）の両方で `/users/password` へ強制遷移する。パスワード変更画面とその送信先だけが対象外（`require_logged_in_user` plug、`:ensure_authenticated_for_password_change` `on_mount`）。
+- 管理操作（`Accounts.create_user/2` など）は先頭引数に `Scope` を取り、Context でも `:manage_users` を検査する（Web 層と二重化）。「最後の `admin`」の判定は、トランザクション内で有効な `admin` を `FOR UPDATE` でロックして数える（同時実行で 0 人にならない）。
 
 ---
 
@@ -312,7 +314,7 @@ end
 | :-- | :-- | :-- | :-- |
 | 共通 | `DATABASE_URL`（本番）/ `PGHOST`・`PGPASSWORD`（開発） | DB 接続 | 本番は必須 |
 | 共通 | `SECRET_KEY_BASE` / `PHX_HOST` / `PORT` / `POOL_SIZE` | Phoenix 標準 | 本番は必須（`POOL_SIZE` は任意） |
-| 共通 | `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` | 初期管理者の作成（seeds・リリースタスク） | 初期作成時 |
+| 共通 | `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` | 初期管理者の作成（seeds・リリースタスク）。**確定済み**（開発は既定値あり） | 本番の初期作成時 |
 | 在庫 | `INVENTORY_API_TOKENS` | サービストークン（カンマ区切り・複数可） | 必須 |
 | 発送 | `INVENTORY_API_BASE_URL` | 在庫 API のベース URL（Compose 内は `http://food_vault_web:4000`） | 必須 |
 | 発送 | `INVENTORY_API_TOKEN` | 在庫 API 用のサービストークン | 必須 |
@@ -403,10 +405,10 @@ end
 | # | 項目 | 内容 |
 | :-- | :-- | :-- |
 | 1 | ULID 依存の採否 | **解決済み**: `ecto_ulid_next` を採用（§4） |
-| 2 | `phx.gen.auth` 生成物の削減範囲 | `deps/` 取得後に生成して確認。`users_tokens` のカラム構成、セッション有効期間の判定が設計（`inserted_at` ベース）と一致するか。ULID 化の手順 |
+| 2 | `phx.gen.auth` 生成物の削減範囲 | **解決済み**: 実生成して確認し、§8.1 のとおり削減した。セッション有効期間は `inserted_at` ベースで設計と一致。ULID 化は schema を `use {App}.Schema` に替え、migration を `:binary_id` の主キー・FK にする |
 | 3 | 本番の構成 | 本番 Dockerfile・リリース・デプロイ先・リバースプロキシ（TLS、`/api` の送信元制限）・Chromium の本番構成が未定 |
 | 4 | PDF のライブラリ最終決定 | `ChromicPDF` を前提に、環境構築セッションで確定。サンドボックス、プール数、タイムアウト |
 | 5 | 品質ゲートの整備 | **解決済み**: `check`、`credo`、`.credo.exs`、PR ワークフローを整備（§14）。CI の実行は PR を出して初めて確認できる |
-| 6 | 環境変数の命名の確定 | §11 の命名案を実装時に確定し、`runtime.exs` に反映 |
+| 6 | 環境変数の命名の確定 | **一部解決**: `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` を確定し `runtime.exs` に反映済み（段階 1）。在庫 API 関連は段階 3・4 で確定 |
 | 7 | 在庫 0 ロットの整理 | 長期運用での肥大化対策（アーカイブなど）。運用開始後に決める |
-| 8 | ログイン試行制限・セッション期間・「ログインしたままにする」 | 本バージョン対象外。`phx.gen.auth` の既定（remember me あり）を踏襲するか |
+| 8 | ログイン試行制限・セッション期間・「ログインしたままにする」 | **解決済み（一部対象外）**: セッション期間と remember me は `phx.gen.auth` の既定を踏襲（§8.1）。ログイン試行制限は引き続き対象外（P2） |
