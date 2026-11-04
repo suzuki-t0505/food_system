@@ -1,0 +1,29 @@
+# Claude Code クラウド環境専用の override。ローカル開発では使わない。
+#
+# クラウド環境ではコンテナから直接インターネットに出られず、ホスト側の
+# プロキシ (127.0.0.1) 経由のみ。そのため web サービスは host ネットワークで動かす。
+#
+# 使い方: export COMPOSE_FILE=docker-compose.yml:scripts/cloud/docker-compose.cloud.yml
+#   (scripts/cloud/setup.sh が ~/.bashrc に追記する)
+x-cloud-app: &cloud_app
+  network_mode: host
+  links: !reset []
+  ports: !reset []
+  extra_hosts:
+    - "db:127.0.0.1" # host ネットワークでは db サービス名が引けないため
+  environment:
+    PGHOST: ${PGHOST-db}
+    PGPASSWORD: ${PGPASSWORD-postgres}
+    HTTPS_PROXY: ${HTTPS_PROXY:-}
+    HTTP_PROXY: ${HTTP_PROXY:-}
+    https_proxy: ${HTTPS_PROXY:-}
+    http_proxy: ${HTTP_PROXY:-}
+    NO_PROXY: localhost,127.0.0.1,db
+
+services:
+  food_vault_web:
+    <<: *cloud_app
+    image: food_system-food_vault_web
+  food_ship_web:
+    <<: *cloud_app
+    image: food_system-food_ship_web
