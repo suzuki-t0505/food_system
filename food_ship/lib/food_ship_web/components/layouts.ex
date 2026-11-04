@@ -39,24 +39,28 @@ defmodule FoodShipWeb.Layouts do
       <div class="flex-1">
         <a href="/" class="flex-1 flex w-fit items-center gap-2">
           <img src={~p"/images/logo.svg"} width="36" />
-          <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
+          <span class="text-sm font-semibold">発送システム</span>
         </a>
       </div>
       <div class="flex-none">
         <ul class="flex px-1 space-x-4 items-center">
-          <li>
-            <a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a>
+          <li :if={@current_scope && @current_scope.user} class="text-sm">
+            {@current_scope.user.name}({FoodShip.Accounts.User.role_label(@current_scope.user.role)})
           </li>
-          <li>
-            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
+          <li :if={
+            @current_scope && @current_scope.user &&
+              FoodShip.Utils.Permission.can?(@current_scope.user, :manage_users)
+          }>
+            <.link navigate={~p"/management/users"} class="btn btn-ghost">ユーザー管理</.link>
+          </li>
+          <li :if={@current_scope && @current_scope.user}>
+            <.link navigate={~p"/users/password"} class="btn btn-ghost">パスワード変更</.link>
+          </li>
+          <li :if={@current_scope && @current_scope.user}>
+            <.link href={~p"/users/log_out"} method="delete" class="btn btn-ghost">ログアウト</.link>
           </li>
           <li>
             <.theme_toggle />
-          </li>
-          <li>
-            <a href="https://phoenix.hexdocs.pm/overview.html" class="btn btn-primary">
-              Get Started <span aria-hidden="true">&rarr;</span>
-            </a>
           </li>
         </ul>
       </div>

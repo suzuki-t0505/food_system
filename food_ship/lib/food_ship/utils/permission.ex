@@ -8,9 +8,16 @@ defmodule FoodShip.Utils.Permission do
 
   @roles [:viewer, :staff, :admin]
 
-  # アクション => 許可する最低ロール
-  # 空のマップをそのまま埋め込むと型チェッカが警告するため、関数で返す
-  defp required_roles, do: Map.new([])
+  # アクション => 許可する最低ロール。モジュール属性にすると型チェッカが警告するため関数で返す
+  # (業務 action は各段階で追加する)
+  defp required_roles do
+    %{
+      # 自分のパスワード変更(全ロール)
+      change_own_password: :viewer,
+      # ユーザー管理(登録・ロール変更・パスワード再設定・アーカイブ)
+      manage_users: :admin
+    }
+  end
 
   @doc "ユーザーが `required` 以上のロールを持つか。"
   @spec role_at_least?(term(), atom()) :: boolean()

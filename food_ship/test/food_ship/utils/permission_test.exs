@@ -34,6 +34,18 @@ defmodule FoodShip.Utils.PermissionTest do
   end
 
   describe "can?/2" do
+    test "ユーザー管理 (manage_users) は admin のみ" do
+      assert Permission.can?(@admin, :manage_users)
+      refute Permission.can?(@staff, :manage_users)
+      refute Permission.can?(@viewer, :manage_users)
+    end
+
+    test "自分のパスワード変更 (change_own_password) は全ロール" do
+      assert Permission.can?(@admin, :change_own_password)
+      assert Permission.can?(@staff, :change_own_password)
+      assert Permission.can?(@viewer, :change_own_password)
+    end
+
     test "未定義のアクションは拒否する" do
       refute Permission.can?(@admin, :no_such_action)
     end
