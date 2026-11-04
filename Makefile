@@ -1,4 +1,4 @@
-.PHONY: setup setup_for_docker_user
+.PHONY: setup setup_for_docker_user check
 .DEFAULT_GOAL := setup
 
 setup:

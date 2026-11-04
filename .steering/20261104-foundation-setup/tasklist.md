@@ -46,22 +46,22 @@
 
 ## 7. 品質ゲート
 
-- [ ] 両アプリの `mix.exs` に `credo` を追加し、`precommit` に `credo --all` を足す
-- [ ] `mix credo gen.config` で `.credo.exs` を生成する
-- [ ] `mix credo --all` を実行し、自作コードの指摘を直す(生成物だけ `files.excluded` に足す)
-- [ ] `Makefile` に `check` を追加し、`.PHONY` に足す
-- [ ] `config/test.exs` の DB `hostname` を `System.get_env("PGHOST", "db")` にする
+- [x] 両アプリの `mix.exs` に `credo` を追加し、`precommit` に `credo --all` を足す
+- [x] `mix credo gen.config` で `.credo.exs` を生成する
+- [x] `mix credo --all` を実行し、自作コードの指摘を直す(生成物だけ `files.excluded` に足す)
+- [x] `Makefile` に `check` を追加し、`.PHONY` に足す(`check` ターゲットは既にあったため `.PHONY` への追加のみ)
+- [x] `config/test.exs` の DB `hostname` を `System.get_env("PGHOST", "db")` にする
 
 ## 8. CI
 
-- [ ] `.github/workflows/ci.yml`: `pull_request` のみ、マトリクス 2 アプリ、`postgres:15.2`、`setup-beam`(Elixir 1.20.5 / OTP 29)、キャッシュ、compile → `format --check-formatted` → credo → test、`permissions: contents: read`
-- [ ] ワークフローの YAML を構文チェックする(CI 自体は PR を出すまで実行できない)
+- [x] `.github/workflows/ci.yml`: `pull_request` のみ、マトリクス 2 アプリ、`postgres:15.2`、`setup-beam`(Elixir 1.20.5 / OTP 29)、キャッシュ、compile → `format --check-formatted` → credo → test、`permissions: contents: read`
+- [x] ワークフローの YAML を構文チェックする(CI 自体は PR を出すまで実行できない。未実施)
 
 ## 9. 検証
 
-- [ ] `make check` が両アプリで通る(警告ゼロ、format 差分なし、credo、test)
-- [ ] 既存の各 5 件を含め、テストがすべて通る
-- [ ] `mix format --check-formatted` を両アプリで確認する
+- [x] `make check` が両アプリで通る(警告ゼロ、format 差分なし、credo、test)
+- [x] 既存の各 5 件を含め、テストがすべて通る
+- [x] `mix format --check-formatted` を両アプリで確認する
 
 ## 10. 永続ドキュメントの更新
 

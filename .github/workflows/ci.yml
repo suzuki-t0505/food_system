@@ -1,0 +1,77 @@
+name: CI
+
+# PR のみで実行する (main への push では回さない)。内容は `make check` と同じ 4 ステップ
+# (compile → format → credo → test)。ローカルの mix_format は整形するが、CI は差分の有無を検査する。
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [food_vault, food_ship]
+
+    services:
+      db:
+        image: postgres:15.2
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      MIX_ENV: test
+      PGHOST: localhost
+      PGPASSWORD: postgres
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # バージョンは Dockerfile.dev の ELIXIR_VERSION (1.20.5-otp-29) と揃える
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.20.5"
+          otp-version: "29"
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ${{ matrix.app }}/deps
+            ${{ matrix.app }}/_build
+          key: mix-${{ matrix.app }}-${{ runner.os }}-${{ hashFiles(format('{0}/mix.lock', matrix.app)) }}
+          restore-keys: |
+            mix-${{ matrix.app }}-${{ runner.os }}-
+
+      - run: mix deps.get
+
+      - name: コンパイル (警告をエラーにする)
+        run: mix compile --warnings-as-errors --force
+
+      - name: フォーマット
+        run: mix format --check-formatted
+
+      - name: Credo
+        run: mix credo --all
+
+      - name: テスト
+        run: mix test
