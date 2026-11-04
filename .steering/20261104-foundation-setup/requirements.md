@@ -12,8 +12,8 @@
 
 ### 1. ULID 基盤(architecture §4、未決事項 #1)
 
-- `ecto_ulid` が Elixir 1.20 / Ecto 3.13 でコンパイル・テストできるかを最初に検証する
-- 不可なら、同等の `Ecto.Type`(26 文字 Crockford Base32 ⇔ 16 バイト)を `{App}.ULID` として自前実装する(外部インターフェースは変えない)
+- ULID の依存は **`ecto_ulid_next`**(`Ecto.ULID` を提供)を使う。両アプリの `mix.exs` に追加する
+- Elixir 1.20 / Ecto 3.13 でコンパイル・テストが通ることを最初に確認する。通らない場合は自前実装に切り替えず、結果を報告して判断を仰ぐ
 - 共通スキーママクロ `{App}.Schema`(`@primary_key {:id, Ecto.ULID, autogenerate: true}`、`@foreign_key_type Ecto.ULID`)を作る
 
 ### 2. Utils の雛形(architecture §12、§3.1)
@@ -49,5 +49,6 @@
 
 ## 決定事項
 
+- ULID の依存は `ecto_ulid_next` を使う(architecture.md の「`ecto_ulid` を候補」は、実装後に永続ドキュメントを更新して揃える)
 - 本番向け JSON ログ形式は今回の Logger 雛形に**含める**
 - GitHub Actions は **PR のみ**で回す
