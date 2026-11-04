@@ -445,10 +445,11 @@ defmodule FoodVault.Inventories do
           earliest_expiration: min(l.expiration_date)
         }
 
-    from(s in subquery(filter_lots(grouped, params)),
-      order_by: [asc: s.earliest_expiration, asc: s.item_code, asc: s.warehouse_code]
-    )
-    |> Repo.paginate(params)
+    query =
+      from s in subquery(filter_lots(grouped, params)),
+        order_by: [asc: s.earliest_expiration, asc: s.item_code, asc: s.warehouse_code]
+
+    Repo.paginate(query, params)
   end
 
   defp filter_lots(query, params) do

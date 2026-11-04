@@ -80,15 +80,16 @@ defmodule FoodVault.ShipmentOrders do
 
   @doc "そのロットを引き当てている `allocated` のオーダー(出庫予定日順)。"
   def list_allocating_orders(lot_id) do
-    from(o in ShipmentOrder,
-      join: l in assoc(o, :lines),
-      join: a in assoc(l, :allocations),
-      where: a.lot_id == ^lot_id and o.status == :allocated,
-      order_by: [asc: o.shipment_date, asc: o.id],
-      select: {o, l.item_id, a.allocated_cases, a.allocated_pieces},
-      preload: :warehouse
-    )
-    |> Repo.all()
+    query =
+      from o in ShipmentOrder,
+        join: l in assoc(o, :lines),
+        join: a in assoc(l, :allocations),
+        where: a.lot_id == ^lot_id and o.status == :allocated,
+        order_by: [asc: o.shipment_date, asc: o.id],
+        select: {o, l.item_id, a.allocated_cases, a.allocated_pieces},
+        preload: :warehouse
+
+    Repo.all(query)
   end
 
   defp filter_status(query, value) do
@@ -428,11 +429,12 @@ defmodule FoodVault.ShipmentOrders do
   defp transition_changes(order, :cancel), do: {ShipmentOrder.cancel_changeset(order), :cancelled}
 
   defp order_allocations(order_id) do
-    from(a in ShipmentAllocation,
-      join: l in assoc(a, :shipment_order_line),
-      where: l.shipment_order_id == ^order_id
-    )
-    |> Repo.all()
+    query =
+      from a in ShipmentAllocation,
+        join: l in assoc(a, :shipment_order_line),
+        where: l.shipment_order_id == ^order_id
+
+    Repo.all(query)
   end
 
   defp apply_allocation(actor, order, lots_by_id, allocation, :ship) do
