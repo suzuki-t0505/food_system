@@ -509,8 +509,7 @@ defmodule FoodVault.Inventories do
   `"from"`・`"to"`(JST の日付。両端を含む)。不正な値は無視する。
   """
   def list_inventory_transactions(params \\ %{}) do
-    InventoryTransaction
-    |> join(:inner, [t], l in assoc(t, :lot), as: :lot)
+    from(t in InventoryTransaction, join: l in assoc(t, :lot), as: :lot)
     |> filter_transactions(params)
     |> order_by([t], desc: t.inserted_at, desc: t.id)
     |> preload([:user, lot: [:warehouse, :item]])
