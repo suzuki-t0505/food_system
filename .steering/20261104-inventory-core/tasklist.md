@@ -25,13 +25,14 @@
 ## 2. 単位 B: 入荷・在庫一覧・受払履歴(F-V2・F-V6)
 
 - [x] migration `inventory_lots`(CHECK)は単位 A で作成済み
-- [ ] migration: `inventory_transactions`(CHECK・索引)。追記専用トリガーは `shipment_order_events` と同時に作る
-- [ ] `InventoryTransaction` スキーマ(`InventoryLot` は単位 A で作成済み)
-- [ ] `Inventories`: `receive_inventory/2`(`FOR SHARE`、期限日の確定、`ON CONFLICT` 加算、`receive` 記録)、`list_inventory_lots/1`・`list_inventory_summaries/1`・`get_inventory_lot!/1`・`list_inventory_transactions/1`、共用部品 `lock_items`・`lock_lots`・`record_transaction`
-- [ ] `Items`・`Warehouses` のアーカイブ規則に実ロットを接続する
-- [ ] フィクスチャ(`lot_fixture`)
-- [ ] 画面: `inventory_receipt_live/form.ex`(総数のリアルタイム表示)、`inventory_lot_live/index.ex`・`show.ex`、`inventory_transaction_live/index.ex`、`inventory_components.ex`
-- [ ] テスト(入荷の新規・加算・同時入荷、フィルタ、受払履歴、LiveView のロール別)、品質ゲート、コミット・プッシュ
+- [x] migration: `inventory_transactions`(CHECK・索引)。追記専用トリガー関数 `forbid_update_delete()` と `inventory_transactions` のトリガーを作る(`shipment_order_events` のトリガーは単位 C)
+- [x] `InventoryTransaction` スキーマ(`InventoryLot` は単位 A で作成済み)
+- [x] `Inventories`: `receive_inventory/2`(`FOR SHARE`、期限日の確定、`ON CONFLICT` 加算、`receive` 記録)、`list_inventory_lots/1`・`list_inventory_summaries/1`・`get_inventory_lot!/1`・`list_inventory_transactions/1`、共用部品 `lock_items`・`lock_lots`・`record_transaction`
+- [x] `Items`・`Warehouses` のアーカイブ規則に実ロットを接続する
+- [x] フィクスチャ(`lot_fixture`)と、実コミットで並行テストを行う `ConcurrencyCase`(`sandbox: false`、テスト後に `TRUNCATE`)
+- [x] `Utils.ConvertDatetime`(JST 変換。入荷日の既定と期間検索で使用)
+- [x] 画面: `inventory_receipt_live/form.ex`(総数のリアルタイム表示)、`inventory_lot_live/index.ex`・`show.ex`、`inventory_transaction_live/index.ex`、`inventory_components.ex`
+- [x] テスト(入荷の新規・加算・同時入荷、フィルタ、受払履歴、LiveView のロール別)、品質ゲート、コミット・プッシュ
 
 ## 3. 単位 C: 出庫オーダーの引当(F-V3 前半)
 

@@ -73,6 +73,15 @@ defmodule FoodVaultWeb.Layouts do
       class="flex flex-wrap gap-1 px-4 sm:px-6 lg:px-8"
       id="main-nav"
     >
+      <.link navigate={~p"/inventory_lots"} class="btn btn-sm btn-ghost">在庫一覧</.link>
+      <.link navigate={~p"/inventory_transactions"} class="btn btn-sm btn-ghost">受払履歴</.link>
+      <.link
+        :if={FoodVault.Utils.Permission.can?(@current_scope.user, :receive_inventory)}
+        navigate={~p"/inventory_receipts/new"}
+        class="btn btn-sm btn-ghost"
+      >
+        入荷登録
+      </.link>
       <.link navigate={~p"/masters/makers"} class="btn btn-sm btn-ghost">メーカー</.link>
       <.link navigate={~p"/masters/warehouses"} class="btn btn-sm btn-ghost">倉庫</.link>
       <.link navigate={~p"/masters/items"} class="btn btn-sm btn-ghost">商品</.link>

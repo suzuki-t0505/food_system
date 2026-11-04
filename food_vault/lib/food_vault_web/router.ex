@@ -75,9 +75,24 @@ defmodule FoodVaultWeb.Router do
 
     live_session :require_authenticated_user,
       on_mount: [{FoodVaultWeb.UserAuth, :ensure_authenticated}] do
+      live "/inventory_lots", InventoryLotLive.Index, :index
+      live "/inventory_lots/:id", InventoryLotLive.Show, :show
+      live "/inventory_transactions", InventoryTransactionLive.Index, :index
+
       live "/masters/makers", MakerLive.Index, :index
       live "/masters/warehouses", WarehouseLive.Index, :index
       live "/masters/items", ItemLive.Index, :index
+    end
+  end
+
+  ## staff 以上
+
+  scope "/", FoodVaultWeb do
+    pipe_through [:browser, :require_authenticated_staff_user]
+
+    live_session :require_authenticated_staff,
+      on_mount: [{FoodVaultWeb.UserAuth, :ensure_authenticated_staff}] do
+      live "/inventory_receipts/new", InventoryReceiptLive.Form, :new
     end
   end
 

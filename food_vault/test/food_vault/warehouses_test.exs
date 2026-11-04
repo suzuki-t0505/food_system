@@ -2,10 +2,9 @@ defmodule FoodVault.WarehousesTest do
   use FoodVault.DataCase, async: true
 
   import FoodVault.AccountsFixtures
+  import FoodVault.InventoriesFixtures
   import FoodVault.MastersFixtures
 
-  alias FoodVault.Inventories.InventoryLot
-  alias FoodVault.Repo
   alias FoodVault.Warehouses
   alias FoodVault.Warehouses.Warehouse
 
@@ -54,14 +53,14 @@ defmodule FoodVault.WarehousesTest do
 
     test "在庫があれば拒否する" do
       warehouse = warehouse_fixture()
-      insert_lot!(warehouse, item_fixture(), case_qty: 1)
+      lot_fixture(%{warehouse_id: warehouse.id, case_qty: 1})
 
       assert {:error, :has_stock} = Warehouses.archive_warehouse(user_scope_fixture(), warehouse)
     end
 
     test "在庫 0 のロットだけならアーカイブできる" do
       warehouse = warehouse_fixture()
-      insert_lot!(warehouse, item_fixture(), case_qty: 0, piece_qty: 0)
+      empty_lot!(warehouse)
 
       assert {:ok, _} = Warehouses.archive_warehouse(user_scope_fixture(), warehouse)
     end
@@ -82,15 +81,9 @@ defmodule FoodVault.WarehousesTest do
     end
   end
 
-  # 入荷(単位 B)より前に作るため、ロットを直接作る
-  defp insert_lot!(warehouse, item, qty) do
-    Repo.insert!(%InventoryLot{
-      warehouse_id: warehouse.id,
-      item_id: item.id,
-      expiration_date: ~D[2027-01-01],
-      received_date: ~D[2026-11-01],
-      case_qty: Keyword.get(qty, :case_qty, 0),
-      piece_qty: Keyword.get(qty, :piece_qty, 0)
-    })
+  # 入荷した後に全数を出庫した状態(在庫 0 のロット)を作る
+  defp empty_lot!(warehouse) do
+    lot = lot_fixture(%{warehouse_id: warehouse.id, case_qty: 1})
+    lot |> Ecto.Changeset.change(case_qty: 0) |> FoodVault.Repo.update!()
   end
 end

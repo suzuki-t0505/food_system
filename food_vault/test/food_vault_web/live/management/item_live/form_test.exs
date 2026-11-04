@@ -2,12 +2,11 @@ defmodule FoodVaultWeb.Management.ItemLive.FormTest do
   use FoodVaultWeb.ConnCase, async: true
 
   import FoodVault.AccountsFixtures
+  import FoodVault.InventoriesFixtures
   import FoodVault.MastersFixtures
   import Phoenix.LiveViewTest
 
-  alias FoodVault.Inventories.InventoryLot
   alias FoodVault.Items
-  alias FoodVault.Repo
 
   describe "アクセス制御" do
     for role <- [:staff, :viewer] do
@@ -69,12 +68,7 @@ defmodule FoodVaultWeb.Management.ItemLive.FormTest do
     test "ロットがある商品は入数・期限区分の欄が無効になり、変更されない", %{conn: conn} do
       item = item_fixture(%{units_per_case: 12, expiration_type: :best_before})
 
-      Repo.insert!(%InventoryLot{
-        warehouse_id: warehouse_fixture().id,
-        item_id: item.id,
-        expiration_date: ~D[2027-01-01],
-        received_date: ~D[2026-11-01]
-      })
+      lot_fixture(%{item_id: item.id})
 
       {:ok, lv, html} = live(conn, ~p"/management/items/#{item.id}/edit")
       assert html =~ "ロットがあるため、ケース入数と期限区分は変更できません。"

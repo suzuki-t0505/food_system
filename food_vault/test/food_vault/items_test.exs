@@ -2,12 +2,11 @@ defmodule FoodVault.ItemsTest do
   use FoodVault.DataCase, async: true
 
   import FoodVault.AccountsFixtures
+  import FoodVault.InventoriesFixtures
   import FoodVault.MastersFixtures
 
   alias FoodVault.{Items, Makers}
-  alias FoodVault.Inventories.InventoryLot
   alias FoodVault.Items.Item
-  alias FoodVault.Repo
 
   defp valid_attrs(maker, extra \\ %{}) do
     Map.merge(
@@ -87,7 +86,7 @@ defmodule FoodVault.ItemsTest do
 
     test "ロットがあれば入数・期限区分の変更を拒否する(在庫 0 のロットでも)" do
       item = item_fixture()
-      insert_lot!(item, case_qty: 0)
+      empty_lot!(item)
       scope = user_scope_fixture()
 
       assert {:error, :lots_exist} = Items.update_item(scope, item, %{units_per_case: 24})
@@ -97,7 +96,7 @@ defmodule FoodVault.ItemsTest do
 
     test "ロットがあっても名称・メーカーは変更できる" do
       item = item_fixture()
-      insert_lot!(item, case_qty: 3)
+      lot_fixture(%{item_id: item.id, case_qty: 3})
       new_maker = maker_fixture()
 
       assert {:ok, %Item{item_name: "新名称", maker_id: maker_id}} =
@@ -132,9 +131,9 @@ defmodule FoodVault.ItemsTest do
     test "在庫があれば拒否し、在庫 0 のロットだけなら許可する" do
       scope = user_scope_fixture()
       with_stock = item_fixture()
-      insert_lot!(with_stock, piece_qty: 1)
+      lot_fixture(%{item_id: with_stock.id, case_qty: 0, piece_qty: 1})
       empty = item_fixture()
-      insert_lot!(empty, case_qty: 0)
+      empty_lot!(empty)
 
       assert {:error, :has_stock} = Items.archive_item(scope, with_stock)
       assert {:ok, _} = Items.archive_item(scope, empty)
@@ -180,15 +179,9 @@ defmodule FoodVault.ItemsTest do
     end
   end
 
-  # 入荷(単位 B)より前に作るため、ロットを直接作る
-  defp insert_lot!(item, qty) do
-    Repo.insert!(%InventoryLot{
-      warehouse_id: warehouse_fixture().id,
-      item_id: item.id,
-      expiration_date: ~D[2027-01-01],
-      received_date: ~D[2026-11-01],
-      case_qty: Keyword.get(qty, :case_qty, 0),
-      piece_qty: Keyword.get(qty, :piece_qty, 0)
-    })
+  # 入荷した後に全数を出庫した状態(在庫 0 のロット)を作る
+  defp empty_lot!(item) do
+    lot = lot_fixture(%{item_id: item.id, case_qty: 1})
+    lot |> Ecto.Changeset.change(case_qty: 0) |> FoodVault.Repo.update!()
   end
 end
