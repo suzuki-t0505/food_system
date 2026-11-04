@@ -807,7 +807,9 @@ PDF 帳票は LiveView ではなく Controller（`ReportController`：`total_pic
 
 - 在庫・発送とも、`mix phx.gen.auth` をベースに、**自己登録・マジックリンク・メール確認を取り除き、パスワード認証のみ**にする。ユーザーは管理者が登録し、在庫と発送で別管理（別 DB）。
 - 現在ユーザーは Phoenix 1.8 の `current_scope`（`current_scope.user`）で扱い、`<Layouts.app current_scope={@current_scope} ...>` に渡す。
-- パスワードは bcrypt でハッシュ化、最小 12 文字。ログイン失敗時のエラーは「メールアドレスまたはパスワードが正しくありません。」の 1 種類のみ。
+- パスワードは bcrypt でハッシュ化、最小 12 文字。ログイン失敗時のエラーは「メールアドレスまたはパスワードが正しくありません。」の 1 種類のみ（存在しないメール・パスワード誤り・アーカイブ済みを区別しない）。
+- 「ログインしたままにする」（remember me）は `phx.gen.auth` の既定を踏襲する（cookie 14 日）。セッションの有効期間は 14 日。ログイン試行制限は対象外（P2）。
+- 画面は `/users/log_in`（ログイン）、`/users/password`（自分のパスワード変更。現在のパスワードが必要）、`/management/users`（ユーザー管理。`admin` のみ）。`/` を含む保護画面は未ログインでログイン画面へ遷移し、ログイン後は元のページへ戻る。`must_change_password = true` のユーザーは、パスワードを変更するまで `/users/password` 以外へ進めない。
 - パスワード再設定は **管理者が行う運用**（メール送信基盤を使わない）。再設定後は `must_change_password = true`。
 - 初期管理者は seeds（開発）／リリースタスク（本番）で作成する。初期パスワードは環境変数から読み、作成後に `must_change_password = true`。
 

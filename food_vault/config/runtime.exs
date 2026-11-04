@@ -23,6 +23,16 @@ end
 config :food_vault, FoodVaultWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 
+# 初期管理者(seeds・リリースタスクが読む)。開発は既定値あり。本番は初期作成時のみ必須
+# (`FoodVault.Release.create_initial_admin/0` が未設定を報告する)。
+if config_env() in [:dev, :prod] do
+  dev? = config_env() == :dev
+
+  config :food_vault, FoodVault.Accounts.InitialAdmin,
+    email: System.get_env("INITIAL_ADMIN_EMAIL") || if(dev?, do: "admin@example.com"),
+    password: System.get_env("INITIAL_ADMIN_PASSWORD") || if(dev?, do: "admin-password-dev")
+end
+
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
   config :food_vault, FoodVaultWeb.Endpoint,

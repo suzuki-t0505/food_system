@@ -35,4 +35,31 @@ defmodule FoodVaultWeb.ConnCase do
     FoodVault.DataCase.setup_sandbox(tags)
     {:ok, conn: Phoenix.ConnTest.build_conn()}
   end
+
+  @doc """
+  ログイン済みのユーザーを用意する setup。
+
+      setup :register_and_log_in_user          # viewer
+      @tag role: :admin
+      setup :register_and_log_in_user
+
+  `must_change_password` は false(パスワード変更済み)にする。
+  `conn` / `user` / `scope` をテストコンテキストに入れる。
+  """
+  def register_and_log_in_user(%{conn: conn} = context) do
+    role = Map.get(context, :role, :viewer)
+    user = FoodVault.AccountsFixtures.user_fixture(%{role: role, must_change_password: false})
+    scope = FoodVault.Accounts.Scope.for_user(user)
+
+    %{conn: log_in_user(conn, user), user: user, scope: scope}
+  end
+
+  @doc "`user` のセッションを作った `conn` を返す。"
+  def log_in_user(conn, user) do
+    token = FoodVault.Accounts.generate_user_session_token(user)
+
+    conn
+    |> Phoenix.ConnTest.init_test_session(%{})
+    |> Plug.Conn.put_session(:user_token, token)
+  end
 end
