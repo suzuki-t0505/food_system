@@ -82,10 +82,10 @@ docker compose up -d
 | :-- | :-- |
 | `make mix_compile` | `mix compile --warnings-as-errors --force` |
 | `make mix_format` | `mix format` |
-| `make mix_credo` | `mix credo --all`（`credo` 導入後） |
+| `make mix_credo` | `mix credo --all` |
 | `make mix_test` / `make mix_test_cover` | テスト／カバレッジ |
 | `make mix_clean` | `mix clean` |
-| `make check`（整備予定） | 上の compile → format → credo → test をまとめて実行 |
+| `make check` | 上の compile → format → credo → test をまとめて実行 |
 
 1 つのアプリだけを対象にする場合は `docker compose run --rm food_vault_web mix ...` / `food_ship_web` を直接使う。
 
@@ -96,7 +96,7 @@ docker compose up -d
 3. `mix credo --all` が通る
 4. `mix test` が通る
 
-CI でも同じ `check` を回す（整備予定、[architecture §14](architecture.md#14-開発環境品質ゲートci)）。失敗したままプッシュしない。
+CI でも同じ内容を回す（PR のみ。`.github/workflows/ci.yml`、[architecture §14](architecture.md#14-開発環境品質ゲートci)）。失敗したままプッシュしない。
 
 ---
 

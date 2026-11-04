@@ -65,12 +65,20 @@
 
 ## 10. 永続ドキュメントの更新
 
-- [ ] `docs/architecture.md`: `ecto_ulid` → `ecto_ulid_next`(§1・§4・§16 #1)、§14 の「現状の不足」と未決事項 #5 の解消、Logger の JSON 形式の実装方針
-- [ ] `docs/functional-design.md`・`docs/glossary.md`・`docs/repository-structure.md`・`docs/development-guidelines.md`: `ecto_ulid` の言及と「整備予定」(`make check` など)の表記を揃える
-- [ ] `persistent-doc-updater` で影響を判定し、必要なものだけ更新する
+- [x] `docs/architecture.md`: `ecto_ulid` → `ecto_ulid_next`(§1・§4・§16 #1)、§14 の「現状の不足」と未決事項 #5 の解消、Logger の JSON 形式の実装方針
+- [x] `docs/product-requirements.md`・`docs/repository-structure.md`・`docs/development-guidelines.md`: `ecto_ulid` の言及と「整備予定」の表記を揃える(`functional-design.md`・`glossary.md` には該当なし)
+- [x] `persistent-doc-updater` で影響を判定し、必要なものだけ更新する(エージェントは使わず、`grep` で該当箇所を洗い出して直接更新した)
 
 ## 11. 完了処理
 
-- [ ] この tasklist の完了状況を最終更新する
-- [ ] 作業ブランチ `claude/dreamy-turing-zhhryv` にコミットして push する(PR は指示があるときのみ作成)
-- [ ] 振り返り(実装中に変えた設計・残課題)を末尾に追記する
+- [x] この tasklist の完了状況を最終更新する
+- [x] 作業ブランチ `claude/dreamy-turing-zhhryv` にコミットして push する(PR は指示があるときのみ作成。PR は未作成)
+- [x] 振り返り(実装中に変えた設計・残課題)を末尾に追記する
+
+## 振り返り
+
+- `Makefile` の `check` ターゲットは既に存在していた(design.md の「無い」は誤り)。`.PHONY` への追加のみ行った
+- 未定義ログカテゴリは、design.md では「ログは出し、例外にする」としていたが、実装は**例外を先に出す**(`category_name!/1`)。本番(`raise_on_unknown_category: false`)ではカテゴリ名をそのまま出力して落とさない
+- `food_ship` の `Permission` は、空の権限表を module 属性にするとコンパイラの型チェッカが警告するため、`required_roles/0` 関数で返す形にした
+- `Logger` / `OperationLog` のテストは、テスト環境のログレベルが `warning` のため、`info` を出す `OperationLog` のテストだけレベルを一時的に下げている
+- 残課題: CI(GitHub Actions)は PR を出すまで実行できず、`setup-beam` が Elixir 1.20.5 / OTP 29 を取得できるかは未確認。`remote_ip` はリバースプロキシ配下では proxy の IP になる(本番構成 #3 の決定後に見直す)。`OperationLog` の `use {AppWeb}, :live_view` / `:controller` への組み込みは `current_scope` が揃う段階 1 以降

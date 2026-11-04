@@ -91,7 +91,7 @@ lib/
 ├── food_vault.ex                       # ［現状］
 ├── food_vault/
 │   ├── application.ex / repo.ex / mailer.ex   # ［現状］
-│   ├── schema.ex                       # {App}.Schema マクロ（ULID 主キー）［計画・最初に作る］
+│   ├── schema.ex                       # {App}.Schema マクロ（ULID 主キー）
 │   ├── accounts.ex                     # Context: ユーザー・認証・ロール
 │   ├── accounts/
 │   │   ├── user.ex
@@ -112,7 +112,8 @@ lib/
 │   └── utils/
 │       ├── calc.ex                     # 総バラ数などの計算
 │       ├── permission.ex               # Permission.can?/2
-│       ├── logger.ex                   # カテゴリ付き Logger ラッパー
+│       ├── logger.ex                   # カテゴリ付き Logger ラッパー（normalize/1 で機微データをマスク）
+│       ├── logger/json_formatter.ex    # 本番用 JSON ログフォーマッタ
 │       ├── operation_log.ex            # 操作ログ
 │       └── convert_datetime.ex         # UTC → JST 変換
 └── food_vault_web/
@@ -131,7 +132,8 @@ lib/
     │           ├── warehouse_controller.ex       / warehouse_json.ex
     │           └── item_controller.ex            / item_json.ex
     ├── plugs/
-    │   └── service_token_auth.ex       # サービストークン認証（定数時間比較）
+    │   ├── logger_metadata.ex          # Logger メタデータに remote_ip を設定
+    │   └── service_token_auth.ex       # サービストークン認証（定数時間比較）［計画］
     └── live/
         ├── user_session_live/ …        # ログイン・パスワード変更
         ├── inventory_lot_live/         # 在庫一覧・ロット詳細（index.ex / show.ex）
@@ -196,7 +198,7 @@ test/
 lib/
 ├── food_ship/
 │   ├── application.ex / repo.ex / mailer.ex   # ［現状］
-│   ├── schema.ex                       # {App}.Schema マクロ［計画・最初に作る］
+│   ├── schema.ex                       # {App}.Schema マクロ（ULID 主キー）
 │   ├── accounts.ex  /  accounts/{user,user_token}.ex
 │   ├── clients.ex  /  clients/client.ex
 │   ├── shipping_items.ex  /  shipping_items/shipping_item.ex
@@ -217,6 +219,7 @@ lib/
 └── food_ship_web/
     ├── endpoint.ex / router.ex / telemetry.ex / gettext.ex   # ［現状］
     ├── user_auth.ex                    # ［計画］
+    ├── plugs/logger_metadata.ex        # Logger メタデータに remote_ip を設定
     ├── components/                     # core_components.ex は改変しない
     ├── controllers/
     │   ├── report_controller.ex        # total_pick/2・work_order/2・total_pick_bundle/2
@@ -294,9 +297,7 @@ test/
 
 | # | 内容 |
 | :-- | :-- |
-| 1 | `Makefile` に `check` ターゲットが無い。両アプリに `credo` 依存と `.credo.exs` が無い（[architecture.md §14](architecture.md#14-開発環境品質ゲートci)） |
-| 2 | PR ワークフロー（`.github/workflows/`）が無い。lint と test を回すワークフローを追加する |
-| 3 | `.steering/` と `mock/` はまだ無い。作業の開始時に作成する |
+| 1 | `mock/` はまだ無い。作業の開始時に作成する(`.steering/`、`Makefile` の `check`、`credo`、PR ワークフローは整備済み。[architecture.md §14](architecture.md#14-開発環境品質ゲートci)) |
 
 ### 6.2 ルートの `.gitignore` の方針
 
