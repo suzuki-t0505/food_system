@@ -66,12 +66,37 @@ defmodule FoodVaultWeb.Router do
     post "/users/update_password", UserSessionController, :update_password
   end
 
+  ## staff 以上
+
+  scope "/", FoodVaultWeb do
+    pipe_through [:browser, :require_authenticated_staff_user]
+
+    live_session :require_authenticated_staff,
+      on_mount: [{FoodVaultWeb.UserAuth, :ensure_authenticated_staff}] do
+      live "/inventory_receipts/new", InventoryReceiptLive.Form, :new
+      live "/shipment_orders/new", ShipmentOrderLive.Form, :new
+    end
+  end
+
   ## 全ロール(ログイン済み)
 
   scope "/", FoodVaultWeb do
     pipe_through [:browser, :require_authenticated_user]
 
     get "/", PageController, :home
+
+    live_session :require_authenticated_user,
+      on_mount: [{FoodVaultWeb.UserAuth, :ensure_authenticated}] do
+      live "/inventory_lots", InventoryLotLive.Index, :index
+      live "/inventory_lots/:id", InventoryLotLive.Show, :show
+      live "/inventory_transactions", InventoryTransactionLive.Index, :index
+      live "/shipment_orders", ShipmentOrderLive.Index, :index
+      live "/shipment_orders/:id", ShipmentOrderLive.Show, :show
+
+      live "/masters/makers", MakerLive.Index, :index
+      live "/masters/warehouses", WarehouseLive.Index, :index
+      live "/masters/items", ItemLive.Index, :index
+    end
   end
 
   ## admin 専用
@@ -84,6 +109,15 @@ defmodule FoodVaultWeb.Router do
       live "/users", UserLive.Index, :index
       live "/users/new", UserLive.Form, :new
       live "/users/:id/reset_password", UserLive.Form, :reset_password
+
+      live "/makers/new", MakerLive.Form, :new
+      live "/makers/:id/edit", MakerLive.Form, :edit
+      live "/warehouses/new", WarehouseLive.Form, :new
+      live "/warehouses/:id/edit", WarehouseLive.Form, :edit
+      live "/items/new", ItemLive.Form, :new
+      live "/items/:id/edit", ItemLive.Form, :edit
+
+      live "/inventory_lots/:id/adjustments/new", InventoryAdjustmentLive.Form, :new
     end
   end
 end

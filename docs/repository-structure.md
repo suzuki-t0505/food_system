@@ -98,33 +98,33 @@ lib/
 │   │   ├── user_token.ex
 │   │   └── scope.ex                    # current_scope（user を持つ）
 │   ├── release.ex                      # リリースタスク（初期管理者の作成）
-│   ├── makers.ex  /  makers/maker.ex
-│   ├── warehouses.ex  /  warehouses/warehouse.ex
-│   ├── items.ex  /  items/item.ex
-│   ├── inventories.ex                  # Context: 入荷・移動・調整、ロットのロックと更新
+│   ├── makers.ex  /  makers/maker.ex                    # ［現状：段階 2 で実装済み］
+│   ├── warehouses.ex  /  warehouses/warehouse.ex        # ［現状：段階 2］
+│   ├── items.ex  /  items/item.ex                       # ［現状：段階 2］
+│   ├── inventories.ex                  # Context: 入荷・調整、ロットのロックと更新、受払履歴の記録・検索［現状：段階 2。移動は P1］
 │   ├── inventories/
-│   │   ├── inventory_lot.ex
-│   │   └── inventory_transaction.ex
-│   ├── shipment_orders.ex              # Context: 引当・確定・解除・出庫取消
+│   │   ├── inventory_lot.ex            # ［現状：段階 2］
+│   │   └── inventory_transaction.ex    # 追記専用 ［現状：段階 2］
+│   ├── shipment_orders.ex              # Context: 引当・確定・解除［現状：段階 2。出庫取消は P1］
 │   ├── shipment_orders/
-│   │   ├── shipment_order.ex
-│   │   ├── shipment_order_line.ex
-│   │   ├── shipment_allocation.ex
-│   │   └── shipment_order_event.ex
+│   │   ├── shipment_order.ex / shipment_order_line.ex / shipment_allocation.ex   # ［現状：段階 2］
+│   │   ├── shipment_order_event.ex     # 追記専用 ［現状：段階 2］
+│   │   ├── request.ex                  # 引当要求の検証・正規化・冪等判定の比較 ［現状：段階 2］
+│   │   └── allocation_plan.ex          # 明細 1 行の引当計画（純粋関数）［現状：段階 2］
 │   └── utils/
-│       ├── calc.ex                     # 総バラ数などの計算
-│       ├── permission.ex               # Permission.can?/2
+│       ├── calc.ex                     # 総バラ数などの計算 ［現状：段階 2］
+│       ├── permission.ex               # Permission.can?/2・authorize/2
 │       ├── logger.ex                   # カテゴリ付き Logger ラッパー（normalize/1 で機微データをマスク）
 │       ├── logger/json_formatter.ex    # 本番用 JSON ログフォーマッタ
 │       ├── operation_log.ex            # 操作ログ
-│       └── convert_datetime.ex         # UTC → JST 変換
+│       └── convert_datetime.ex         # UTC → JST 変換 ［現状：段階 2］
 └── food_vault_web/
     ├── endpoint.ex / router.ex / telemetry.ex / gettext.ex   # ［現状］
     ├── user_auth.ex                    # plug と on_mount（current_scope の assign）［現状：段階 1 で実装済み］
     ├── components/
     │   ├── core_components.ex          # **改変しない** ［現状］
     │   ├── layouts.ex  /  layouts/root.html.heex   # ［現状］
-    │   └── *_components.ex             # 業務用コンポーネント［計画］
+    │   └── inventory_components.ex     # ページ送り・アーカイブ表示・数量 3 列表記 ［現状：段階 2］
     ├── controllers/
     │   ├── error_html.ex / error_json.ex / page_*.ex   # ［現状］
     │   └── api/
@@ -138,14 +138,15 @@ lib/
     │   └── service_token_auth.ex       # サービストークン認証（定数時間比較）［計画］
     └── live/
         ├── user_session_live/          # ログイン・パスワード変更（login.ex / password.ex）［現状］
-        ├── inventory_lot_live/         # 在庫一覧・ロット詳細（index.ex / show.ex）
-        ├── inventory_receipt_live/     # 入荷登録（form.ex）
-        ├── shipment_order_live/        # 出庫オーダー（index.ex / show.ex / form.ex）
-        ├── inventory_transfer_live/    # 倉庫間移動（form.ex）
-        ├── inventory_transaction_live/ # 受払履歴（index.ex）
+        ├── inventory_lot_live/         # 在庫一覧・ロット詳細（index.ex / show.ex）［現状：段階 2］
+        ├── inventory_receipt_live/     # 入荷登録（form.ex）［現状：段階 2］
+        ├── shipment_order_live/        # 出庫オーダー（index.ex / show.ex / form.ex）［現状：段階 2］
+        ├── inventory_transfer_live/    # 倉庫間移動（form.ex）［計画：P1］
+        ├── inventory_transaction_live/ # 受払履歴（index.ex）［現状：段階 2］
+        ├── maker_live/ warehouse_live/ item_live/   # マスタ一覧・参照（全ロール）。/masters/... ［現状：段階 2］
         └── management/                 # admin 専用（/management/...）
-            ├── inventory_adjustment_live/    # 棚卸調整・入荷訂正・荷まとめ
-            ├── maker_live/ warehouse_live/ item_live/
+            ├── inventory_adjustment_live/    # 棚卸調整・入荷訂正・荷まとめ ［現状：段階 2］
+            ├── maker_live/ warehouse_live/ item_live/   # マスタの登録・編集（form.ex）［現状：段階 2］
             └── user_live/              # ユーザー管理（index.ex / form.ex）［現状］
 ```
 
@@ -155,21 +156,21 @@ lib/
 priv/
 ├── repo/
 │   ├── migrations/             # {timestamp}_{動詞_対象}.exs（FK の依存順に作成）
-│   └── seeds.exs               # 開発用の初期データ（初期管理者を含む）［現状：初期管理者を作成］
+│   └── seeds.exs               # 開発用の初期データ（初期管理者、メーカー 2・倉庫 2・商品 3）［現状：作成済み・冪等］
 ├── static/                     # ビルド成果物（git 管理外）
 └── gettext/                    # ［現状］。単一言語のため業務文言には使わない
 ```
 
-マイグレーションの作成順（FK の依存順。名前は計画）:
+マイグレーションの作成順（FK の依存順。**［現状：段階 2 で 4〜6 を実装済み。実際の順は下表の備考のとおり**）:
 
 | 順 | マイグレーション | 内容 |
 | :-- | :-- | :-- |
 | 1 | `create_users_auth_tables` | `citext` 拡張、`users`、`users_tokens` |
-| 2 | `create_makers` / `create_warehouses` | マスタ |
+| 2 | `create_makers_and_warehouses` | マスタ |
 | 3 | `create_items` | `makers` を参照 |
 | 4 | `create_inventory_lots` | CHECK 制約・複合ユニーク |
-| 5 | `create_shipment_orders` | `shipment_orders` / `shipment_order_lines` / `shipment_allocations` / `shipment_order_events`、部分ユニーク |
-| 6 | `create_inventory_transactions` | `inventory_lots` / `shipment_orders` / `users` を参照 |
+| 5 | `create_inventory_transactions` | `inventory_lots` / `users` を参照。追記専用トリガー関数 `forbid_update_delete()` とトリガーを作る。`shipment_order_id` は FK なしで作る |
+| 6 | `create_shipment_orders` | `shipment_orders` / `shipment_order_lines` / `shipment_allocations` / `shipment_order_events`、部分ユニーク、`shipment_order_events` の追記専用トリガー、`inventory_transactions.shipment_order_id` への FK 追加（5 の時点では `shipment_orders` が無いため） |
 
 ### 3.4 `test/`
 
@@ -178,7 +179,8 @@ test/
 ├── test_helper.exs
 ├── support/
 │   ├── data_case.ex / conn_case.ex          # ［現状］
-│   └── fixtures/*_fixtures.ex               # Context の公開 API 経由で作る
+│   ├── concurrency_case.ex                  # 複数プロセスで実コミットする並行テスト用（`sandbox: false`、後始末は TRUNCATE）［現状：段階 2］
+│   └── fixtures/*_fixtures.ex               # Context の公開 API 経由で作る（masters / inventories / shipment_orders）
 ├── food_vault/                              # ドメイン層（lib/food_vault をミラー）
 │   ├── accounts_test.exs / inventories_test.exs / shipment_orders_test.exs / ...
 │   └── utils/

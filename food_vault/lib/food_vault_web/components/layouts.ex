@@ -31,6 +31,8 @@ defmodule FoodVaultWeb.Layouts do
     default: nil,
     doc: "the current [scope](https://phoenix.hexdocs.pm/scopes.html)"
 
+  attr :wide, :boolean, default: false, doc: "一覧など、横幅の広い画面で true"
+
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -66,8 +68,28 @@ defmodule FoodVaultWeb.Layouts do
       </div>
     </header>
 
+    <nav
+      :if={@current_scope && @current_scope.user}
+      class="flex flex-wrap gap-1 px-4 sm:px-6 lg:px-8"
+      id="main-nav"
+    >
+      <.link navigate={~p"/inventory_lots"} class="btn btn-sm btn-ghost">在庫一覧</.link>
+      <.link navigate={~p"/inventory_transactions"} class="btn btn-sm btn-ghost">受払履歴</.link>
+      <.link
+        :if={FoodVault.Utils.Permission.can?(@current_scope.user, :receive_inventory)}
+        navigate={~p"/inventory_receipts/new"}
+        class="btn btn-sm btn-ghost"
+      >
+        入荷登録
+      </.link>
+      <.link navigate={~p"/shipment_orders"} class="btn btn-sm btn-ghost">出庫オーダー</.link>
+      <.link navigate={~p"/masters/makers"} class="btn btn-sm btn-ghost">メーカー</.link>
+      <.link navigate={~p"/masters/warehouses"} class="btn btn-sm btn-ghost">倉庫</.link>
+      <.link navigate={~p"/masters/items"} class="btn btn-sm btn-ghost">商品</.link>
+    </nav>
+
     <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
+      <div class={["mx-auto space-y-4", (@wide && "max-w-6xl") || "max-w-2xl"]}>
         {render_slot(@inner_block)}
       </div>
     </main>

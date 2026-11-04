@@ -185,4 +185,7 @@
 | Context | ドメイン層の公開 API（`FoodVault.Inventories` など）。Context + スキーマの 2 層で、子エンティティ専用の Context は作らない |
 | `Ecto.Multi` / `Repo.transact/1` | 複数テーブルの更新に使う（coding-rules §7）。在庫側の引当・確定・取消は単一トランザクション |
 | ロックキー | 在庫のデッドロック防止のため、ロットを `(warehouse_id, item_id, expiration_date, received_date, id)` 昇順で 1 クエリでロックする規則 |
+| 引当計画 | `FoodVault.ShipmentOrders.AllocationPlan.plan_line/4` が、ロックしたロットと要求数量から、どのロットから何ケース・何バラ引き当て、何ケース荷崩しするかを DB に触れずに計算した結果。計画を作ってから Multi で適用する |
+| 操作者（actor） | 在庫側の書き込み関数の第 1 引数。画面のユーザー（`%User{}`）か、在庫 API の `{:api, operator}`。受払履歴・オーダー履歴の `user_id` / `operator` に残る |
+| 追記専用 | `inventory_transactions` と `shipment_order_events` は INSERT のみ。更新・削除の関数を作らず、DB のトリガー（`forbid_update_delete()`）でも拒否する |
 | 引当合計の検証 | 発送側が、在庫側の応答の引当バラ数の合計が `total_piece_qty` と一致することを確認する処理。不一致は `allocated` にしない |
