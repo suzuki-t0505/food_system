@@ -54,6 +54,25 @@ defmodule FoodVaultWeb.ConnCase do
     %{conn: log_in_user(conn, user), user: user, scope: scope}
   end
 
+  @doc """
+  在庫 API 用の `conn` を返す。サービストークン(`token`、既定は test.exs の 1 つ目)と
+  JSON の `accept` / `content-type` を付ける。
+  """
+  def api_conn(token \\ "test-inventory-api-token") do
+    Phoenix.ConnTest.build_conn()
+    |> put_api_headers()
+    |> Plug.Conn.put_req_header("authorization", "Bearer " <> token)
+  end
+
+  @doc "トークンなしの在庫 API 用 `conn`。"
+  def unauthenticated_api_conn, do: put_api_headers(Phoenix.ConnTest.build_conn())
+
+  defp put_api_headers(conn) do
+    conn
+    |> Plug.Conn.put_req_header("accept", "application/json")
+    |> Plug.Conn.put_req_header("content-type", "application/json")
+  end
+
   @doc "`user` のセッションを作った `conn` を返す。"
   def log_in_user(conn, user) do
     token = FoodVault.Accounts.generate_user_session_token(user)

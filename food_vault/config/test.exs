@@ -43,5 +43,9 @@ config :phoenix_live_view,
 config :phoenix,
   sort_verified_routes_query_params: true
 
+# 在庫 API のサービストークン (複数登録のテスト用に 2 つ)
+config :food_vault, FoodVaultWeb.Plugs.ServiceTokenAuth,
+  tokens: ["test-inventory-api-token", "test-inventory-api-token-2"]
+
 # 未定義のログカテゴリは例外にする (本番は false)
 config :food_vault, FoodVault.Utils.Logger, raise_on_unknown_category: true

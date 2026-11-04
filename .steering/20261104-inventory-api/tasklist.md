@@ -10,14 +10,14 @@
 
 ## 1. 単位 A: 認証・基盤
 
-- [ ] `config/runtime.exs`(`INVENTORY_API_TOKENS`、dev の既定値、prod の未設定で `raise`)、`config/test.exs`(テスト用トークン 2 つ)
-- [ ] `FoodVaultWeb.Plugs.ServiceTokenAuth`(`valid_token?/1`、401、`:api` ログ)とテスト
-- [ ] `FoodVaultWeb.Api.ErrorResponse`、`FoodVaultWeb.Plugs.ApiFormat`(Endpoint の `Plug.Parsers` の前)とテスト
-- [ ] `ErrorJSON` を共通形式に変更し、テストを更新
-- [ ] `OperationLog` が `api_operator` を操作者として扱うようにし、テストを追加
-- [ ] `router.ex` の `pipeline :api` に `ServiceTokenAuth` を追加し、`/api/v1` スコープを用意
-- [ ] `ConnCase` に API 用ヘルパー(トークン付与)を追加
-- [ ] 品質ゲート、コミット・プッシュ
+- [x] `config/runtime.exs`(`INVENTORY_API_TOKENS`、dev の既定値、prod の未設定で `raise`)、`config/test.exs`(テスト用トークン 2 つ)
+- [x] `FoodVaultWeb.Plugs.ServiceTokenAuth`(`valid_token?/1`、401、`:api` ログ)とテスト
+- [x] `FoodVaultWeb.Api.ErrorResponse`、`FoodVaultWeb.Plugs.ApiFormat`(Endpoint の `Plug.Parsers` の前)とテスト
+- [x] `ErrorJSON` を共通形式に変更し、テストを更新
+- [x] `OperationLog` が `api_operator` を操作者として扱うようにし、テストを追加
+- [x] `router.ex` の `pipeline :api` に `ServiceTokenAuth` を追加(`/api/v1` スコープは単位 B で Controller と同時に追加する。未定義モジュールの警告を避けるため)
+- [x] `ConnCase` に API 用ヘルパー(トークン付与)を追加
+- [x] 品質ゲート、コミット・プッシュ
 
 ## 2. 単位 B: ① 出庫引当・⑤ 照会
 
