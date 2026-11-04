@@ -91,7 +91,7 @@ flowchart TB
 | `FoodVault.Warehouses` | `Warehouse` |
 | `FoodVault.Items` | `Item` |
 | `FoodVault.Inventories` | `InventoryLot`, `InventoryTransaction`（入荷・移動・調整、ロットのロックと更新） |
-| `FoodVault.ShipmentOrders` | `ShipmentOrder`, `ShipmentOrderLine`, `ShipmentAllocation`, `ShipmentOrderEvent`（引当・確定・解除・出庫取消） |
+| `FoodVault.ShipmentOrders` | `ShipmentOrder`, `ShipmentOrderLine`, `ShipmentAllocation`, `ShipmentOrderEvent`（引当・確定・解除・出庫取消）。補助モジュール `Request`（要求の検証・正規化・冪等判定の比較）と `AllocationPlan`（明細 1 行の引当計画。純粋関数）。**段階 2 で実装済み**（出庫取消は P1） |
 
 **発送システム（`FoodShip`）**
 
@@ -172,7 +172,7 @@ flowchart TB
 | 商品行 | 入荷・引当・移動先作成は `items` 行を `lock: "FOR SHARE"` で読む（`item_id` 昇順）。マスタ更新は `lock: "FOR UPDATE"`（入数・期限区分の変更ガードの競合対策） |
 | ロット | `from l in InventoryLot, where: ..., order_by: [asc: l.warehouse_id, asc: l.item_id, asc: l.expiration_date, asc: l.received_date, asc: l.id], lock: "FOR UPDATE"` を **1 クエリで**発行する。操作の途中で追加のロットをロックしない |
 | 順序 | 全操作共通のロックキーは `(warehouse_id, item_id, expiration_date, received_date, id)`。先に `items` の `FOR SHARE`、次にロットの `FOR UPDATE`（`items` → ロットの順を全操作で固定する） |
-| 引当 | 明細を `item_id` 昇順に並べ替え、その商品群のロットを 1 クエリでロックしてから計画を立てる |
+| 引当 | 明細を `item_id` 昇順に並べ替え、その商品群のロットを 1 クエリでロックしてから計画を立てる。ロックするのは「指定倉庫・商品、`expiration_date >= 出庫予定日`、有効在庫あり」のロット。明細ごとの最低許容期限日は、ロック後に明細ごとに絞り込んで適用する（明細ごとに条件が違っても 1 クエリでロックするため）。ロックの順序は 倉庫（`FOR SHARE`）→ 商品（`FOR SHARE`、`id` 昇順）→ ロット |
 | 確定・解除・出庫取消 | 引当明細の `lot_id` を `IN` で 1 クエリロック |
 | 移動 | 移動先ロットを `INSERT ... ON CONFLICT DO NOTHING`（数量 0）で先に確保し、移動元・移動先の 2 ロットを 1 クエリでロック |
 | 入荷 | `Repo.insert(..., on_conflict: [inc: [case_qty: n, piece_qty: m]], conflict_target: [:warehouse_id, :item_id, :expiration_date, :received_date], returning: true)` で原子的に加算 |
@@ -412,3 +412,4 @@ end
 | 6 | 環境変数の命名の確定 | **一部解決**: `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` を確定し `runtime.exs` に反映済み（段階 1）。在庫 API 関連は段階 3・4 で確定 |
 | 7 | 在庫 0 ロットの整理 | 長期運用での肥大化対策（アーカイブなど）。運用開始後に決める |
 | 8 | ログイン試行制限・セッション期間・「ログインしたままにする」 | **解決済み（一部対象外）**: セッション期間と remember me は `phx.gen.auth` の既定を踏襲（§8.1）。ログイン試行制限は引き続き対象外（P2） |
+| 9 | 在庫側の核の実装（段階 2） | **解決済み**: ページングは `scrivener_ecto`（`Repo` に `use Scrivener, page_size: 20`）。並行テストは `ConcurrencyCase`（`sandbox: false` で実コミット、`async: false`、後始末は `TRUNCATE`）。追記専用は DB トリガー（`forbid_update_delete()`）でも担保。在庫 0 のロットは引当済数も 0（CHECK 制約）なので、商品・倉庫のアーカイブ規則の「`allocated` なオーダーに含まれない」は在庫 0 の検査で満たされる |
