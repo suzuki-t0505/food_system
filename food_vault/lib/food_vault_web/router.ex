@@ -19,6 +19,15 @@ defmodule FoodVaultWeb.Router do
     plug FoodVaultWeb.Plugs.ServiceTokenAuth
   end
 
+  ## 在庫 API(発送システム用。サービストークン認証)
+
+  scope "/api/v1", FoodVaultWeb.Api.V1 do
+    pipe_through :api
+
+    # index は ?external_slip_id= の照会専用
+    resources "/shipment_orders", ShipmentOrderController, only: [:create, :show, :index]
+  end
+
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:food_vault, :dev_routes) do
     # If you want to use the LiveDashboard in production, you should put

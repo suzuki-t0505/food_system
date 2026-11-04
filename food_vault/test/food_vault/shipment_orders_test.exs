@@ -426,8 +426,8 @@ defmodule FoodVault.ShipmentOrdersTest do
                })
     end
 
-    test "内容が違えば idempotency_conflict", %{attrs: attrs, item: item} do
-      {:ok, _} = ShipmentOrders.allocate_shipment_order({:api, "a"}, attrs)
+    test "内容が違えば idempotency_conflict(既存オーダーを返す)", %{attrs: attrs, item: item} do
+      {:ok, %{shipment_order: first}} = ShipmentOrders.allocate_shipment_order({:api, "a"}, attrs)
 
       for changed <- [
             %{attrs | lines: [line(item, 2, 0)]},
@@ -435,8 +435,11 @@ defmodule FoodVault.ShipmentOrdersTest do
             %{attrs | lines: [line(item, 1, 0, %{min_expiration_date: ~D[2027-01-01]})]},
             %{attrs | warehouse_id: warehouse_fixture().id}
           ] do
-        assert {:error, :idempotency_conflict} =
+        assert {:error, :idempotency_conflict, existing} =
                  ShipmentOrders.allocate_shipment_order({:api, "a"}, changed)
+
+        assert existing.id == first.id
+        assert existing.status == :allocated
       end
 
       assert Repo.aggregate(ShipmentOrder, :count) == 1
@@ -653,6 +656,63 @@ defmodule FoodVault.ShipmentOrdersTest do
                ShipmentOrders.list_allocating_orders(lot.id)
 
       assert {id, item_id} == {keep.id, ctx.item.id}
+    end
+  end
+
+  describe "fetch_shipment_order/1" do
+    test "ID で取得する(get_shipment_order!/1 と同じ preload)" do
+      order = order_fixture()
+
+      assert {:ok, fetched} = ShipmentOrders.fetch_shipment_order(order.id)
+      assert fetched.id == order.id
+      assert [%{allocations: [%{lot: %{expiration_date: %Date{}}}]}] = fetched.lines
+      assert %{warehouse: %{}, events: [_ | _]} = fetched
+    end
+
+    test "存在しない ID と ULID 形式でない ID は :not_found" do
+      assert {:error, :not_found} = ShipmentOrders.fetch_shipment_order(Ecto.ULID.generate())
+      assert {:error, :not_found} = ShipmentOrders.fetch_shipment_order("not-a-ulid")
+      assert {:error, :not_found} = ShipmentOrders.fetch_shipment_order("")
+      assert {:error, :not_found} = ShipmentOrders.fetch_shipment_order(nil)
+    end
+  end
+
+  describe "list_shipment_orders_by_slip/1" do
+    test "取消済みを含め、新しい順に返す" do
+      attrs = fn lot ->
+        %{
+          warehouse_id: lot.warehouse_id,
+          shipment_date: @date,
+          external_slip_id: "SLIP-LIST",
+          lines: [%{item_id: lot.item_id, req_cases: 1, req_pieces: 0}]
+        }
+      end
+
+      lot = lot_fixture(%{case_qty: 5})
+
+      {:ok, %{shipment_order: first}} =
+        ShipmentOrders.allocate_shipment_order({:api, "a"}, attrs.(lot))
+
+      {:ok, _} = ShipmentOrders.cancel_shipment_order({:api, "a"}, first)
+
+      {:ok, %{shipment_order: second}} =
+        ShipmentOrders.allocate_shipment_order({:api, "a"}, attrs.(lot))
+
+      # inserted_at は秒精度なので、新しさは id(ULID のミリ秒)で決まる
+      assert [newest, oldest] = ShipmentOrders.list_shipment_orders_by_slip("SLIP-LIST")
+      assert newest.id == second.id
+      assert oldest.id == first.id
+      assert oldest.status == :cancelled
+      assert [%{allocations: [%{lot: %{}}]}] = newest.lines
+    end
+
+    test "他の伝票 ID のオーダーは含まず、該当なしは空リスト" do
+      order_fixture(%{external_slip_id: "SLIP-A"})
+
+      assert [%{external_slip_id: "SLIP-A"}] =
+               ShipmentOrders.list_shipment_orders_by_slip("SLIP-A")
+
+      assert ShipmentOrders.list_shipment_orders_by_slip("SLIP-NONE") == []
     end
   end
 

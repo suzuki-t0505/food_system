@@ -44,8 +44,6 @@ defmodule FoodVaultWeb.Endpoint do
   plug FoodVaultWeb.Plugs.LoggerMetadata
   plug Plug.Telemetry, event_prefix: [:phoenix, :endpoint]
 
-  plug FoodVaultWeb.Plugs.ApiFormat
-
   plug Plug.Parsers,
     parsers: [:urlencoded, :multipart, :json],
     pass: ["*/*"],

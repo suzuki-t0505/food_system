@@ -19,7 +19,9 @@ defmodule FoodVault.ShipmentOrders do
     * `{:error, :insufficient_stock, shortages}` - 在庫不足(全体をロールバック済み)。
       `shortages` は不足した**全明細分**の `[%{item_id, shortage_cases, shortage_pieces}]`
     * `{:error, :validation_failed, errors}` - 入力不正(`errors` は `Request` を参照)
-    * `{:error, :idempotency_conflict}` - 同じ `external_slip_id` で内容が違う
+    * `{:error, :idempotency_conflict, existing}` - 同じ `external_slip_id` で内容が違う。
+      `existing` は既存のオーダー(`id`・`status` を持つ)。競合の再比較で既存が見つからなかった
+      稀なケースだけ `nil`
     * `{:error, :invalid_state}` - その状態からは遷移できない
     * `{:error, :forbidden}` - 権限なし
   """
@@ -60,7 +62,35 @@ defmodule FoodVault.ShipmentOrders do
   end
 
   @doc "出庫オーダーを取得する。倉庫・明細(商品・引当ロット)・履歴(操作ユーザー)を preload する。"
-  def get_shipment_order!(id) do
+  def get_shipment_order!(id), do: Repo.get!(detail_query(), id)
+
+  @doc """
+  出庫オーダーを ID で取得する(`get_shipment_order!/1` と同じ preload)。
+
+  ULID の形式でない ID・存在しない ID は `{:error, :not_found}`(例外にしない。在庫 API 用)。
+  """
+  def fetch_shipment_order(id) do
+    with {:ok, id} <- Ecto.ULID.cast(id),
+         %ShipmentOrder{} = order <- Repo.get(detail_query(), id) do
+      {:ok, order}
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
+  @doc """
+  `external_slip_id` が一致するオーダーを新しい順に返す(`cancelled` を含む。在庫 API の照会用)。
+
+  該当なしは `[]`。preload は `get_shipment_order!/1` と同じ。
+  """
+  def list_shipment_orders_by_slip(external_slip_id) when is_binary(external_slip_id) do
+    detail_query()
+    |> where([o], o.external_slip_id == ^external_slip_id)
+    |> order_by([o], desc: o.inserted_at, desc: o.id)
+    |> Repo.all()
+  end
+
+  defp detail_query do
     allocations =
       from(a in ShipmentAllocation, order_by: [asc: a.inserted_at, asc: a.id], preload: :lot)
 
@@ -73,9 +103,7 @@ defmodule FoodVault.ShipmentOrders do
     events =
       from(e in ShipmentOrderEvent, order_by: [asc: e.inserted_at, asc: e.id], preload: :user)
 
-    ShipmentOrder
-    |> preload([:warehouse, lines: ^lines, events: ^events])
-    |> Repo.get!(id)
+    preload(ShipmentOrder, [:warehouse, lines: ^lines, events: ^events])
   end
 
   @doc "そのロットを引き当てている `allocated` のオーダー(出庫予定日順)。"
@@ -130,7 +158,7 @@ defmodule FoodVault.ShipmentOrders do
   任意の `min_expiration_date`)・任意の `external_slip_id`。
 
   `external_slip_id` がある場合は冪等: 取消済み以外に同じ ID のオーダーがあれば、
-  内容が一致すれば既存を返し(`replayed?: true`)、違えば `{:error, :idempotency_conflict}`。
+  内容が一致すれば既存を返し(`replayed?: true`)、違えば `{:error, :idempotency_conflict, existing}`。
   同時の登録でユニーク制約に当たった側も、既存を再取得して同じ判定をする。
 
   1 つの明細でも在庫が足りなければ、荷崩しを含めて全体をロールバックする。
@@ -159,7 +187,7 @@ defmodule FoodVault.ShipmentOrders do
     if Request.same?(order, request) do
       {:ok, %{shipment_order: get_shipment_order!(order.id), replayed?: true}}
     else
-      {:error, :idempotency_conflict}
+      {:error, :idempotency_conflict, order}
     end
   end
 
@@ -195,7 +223,7 @@ defmodule FoodVault.ShipmentOrders do
     case find_replay(request) do
       {:replay, result} -> result
       :none when retry? -> create_order(actor, request, false)
-      :none -> {:error, :idempotency_conflict}
+      :none -> {:error, :idempotency_conflict, nil}
     end
   end
 

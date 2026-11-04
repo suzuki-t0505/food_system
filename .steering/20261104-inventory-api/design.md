@@ -32,7 +32,7 @@
 | 401 | `{ "error": "unauthorized", "message": "..." }` と `www-authenticate: Bearer` ヘッダ。`halt`。失敗は `Logger.warning(..., :api, %{path: ...})` で記録(ヘッダ・トークンは出さない) | §7.4 |
 | エラー形式 | `FoodVaultWeb.Api.ErrorResponse.body(code, message, extra \\ %{})` に 1 か所で作る。`ServiceTokenAuth`・`FallbackController`・`ErrorJSON` が使う | 共通形式の取りこぼしを防ぐ |
 | `ErrorJSON` | `render/2` を共通形式に置き換える(`"404.json"` → `%{error: "not_found", message: ...}`、`"400"` → `bad_request`、`"406"` → `not_acceptable`、`"415"` → `unsupported_media_type`、`"500"` → `internal_server_error`、その他は `status_message_from_template` のスネークケース)。アプリの JSON を返す先は API だけなので既定形式を差し替えてよい | architecture §7.3 は FallbackController だけを挙げるが、ルーティング前に起きる 404 / 400 は Endpoint 経由で `ErrorJSON` に来るため |
-| API の format 固定 | Endpoint の `Plug.Parsers` の**前**に `FoodVaultWeb.Plugs.ApiFormat` を置く。`/api/` で始まるパスだけ `Phoenix.Controller.put_format(conn, "json")` する | `Accept` が無くても壊れた JSON・存在しないルートを JSON で返す |
+| Endpoint エラーの format | `config/config.exs` の `render_errors` の `formats` を **`json` 先頭**(`[json: ErrorJSON, html: ErrorHTML]`)にする。`Accept` が無い・`*/*` のクライアントには JSON、ブラウザ(`Accept: text/html`)は HTML のまま。**当初案の `ApiFormat` plug(`/api/` で `put_format`)は採らなかった**: `Plug.Parsers` の例外は Endpoint 直下で拾われ、plug が付けた format が失われるため(実装で検証して判明) | `Accept` が無くても壊れた JSON・存在しないルートを JSON で返す |
 | 入力 | `conn.params`(JSON ボディ + パス)を `Request.normalize/1` にそのまま渡す。`lines` はリスト、ID・日付は文字列。`operator` だけ Controller で検証する | `Request` は文字列キーを受け付け、`%{path, message}` の `errors` を返す |
 | `operator` の検証 | `FoodVaultWeb.Api.Operator.fetch(params)`(新規)。文字列・trim 後に空でない・255 文字以内。違反は `{:error, :validation_failed, [%{path: ["operator"], message: "..."}]}`。他の項目のエラーと**合算しない**(operator 不正のときは Context を呼ばない) | 簡潔さ優先。複数エラーの同時返却は `Request` の `errors` の範囲内に留める |
 | `reason`(③) | 任意。指定時は文字列で 255 文字以内、違反は 422。空文字・空白のみは `nil` | `shipment_order_events.reason` は `string` |
@@ -62,8 +62,7 @@
 | `config/runtime.exs` | `INVENTORY_API_TOKENS` を読み(カンマ区切り→ trim → 空を除く)、`config :food_vault, FoodVaultWeb.Plugs.ServiceTokenAuth, tokens: tokens`。dev は未設定なら `["dev-inventory-api-token"]`、prod は空なら `raise`(メッセージで設定方法を示す) |
 | `config/test.exs` | `config :food_vault, FoodVaultWeb.Plugs.ServiceTokenAuth, tokens: ["test-inventory-api-token", "test-inventory-api-token-2"]`(複数トークンのテスト用) |
 | `lib/food_vault_web/plugs/service_token_auth.ex`(新規) | `@behaviour Plug`。`call/2`: `authorization` ヘッダ → `Bearer <token>` を取り出し → `valid_token?/1` → 不一致・欠落・形式不正は 401 で `halt`。`valid_token?/1` は public(テスト用・将来の差し替え口) |
-| `lib/food_vault_web/plugs/api_format.ex`(新規) | `/api/` で始まるパスに `put_format("json")` |
-| `lib/food_vault_web/endpoint.ex` | `Plug.Parsers` の前に `plug FoodVaultWeb.Plugs.ApiFormat` |
+| `config/config.exs` | `render_errors` の `formats` を JSON 先頭に(上記) |
 | `lib/food_vault_web/controllers/error_json.ex` | 共通形式に変更(§2) |
 | `lib/food_vault/utils/operation_log.ex` | `operator/1` に `%{assigns: %{api_operator: op}}` の節を追加(`current_scope` より後ろ) |
 | `docker-compose.yml` | **変更しない**。dev のデフォルトは `runtime.exs` にあり、発送側の環境変数と合わせて設定するのは段階 4 のため(requirements.md の該当記述を修正する) |
@@ -140,7 +139,6 @@ end
 | :-- | :-- |
 | `test/support/conn_case.ex` | `put_api_token/2`(`authorization: Bearer ...` を付ける)と `api_conn/0` 相当のヘルパー(JSON の `content-type`/`accept`) |
 | `test/food_vault_web/plugs/service_token_auth_test.exs` | トークンなし・不正・スキーム違い・`Bearer` のみは 401、2 つ目の登録トークンも通る、設定が空なら全拒否、ヘッダ・トークンがログに出ない(`ExUnit.CaptureLog` と `normalize`)、`valid_token?/1` |
-| `test/food_vault_web/plugs/api_format_test.exs` | `/api/` のみ json、他のパスは変わらない |
 | `test/food_vault_web/controllers/error_json_test.exs` | 共通形式に更新 |
 | `test/food_vault_web/controllers/api/v1/shipment_order_controller_test.exs` | ① 201/200/409(`order_id`・`status`)/422 不足(全明細分・DB 不変)/422 検証(`operator` 欠落・ID 形式不正・数量負・明細空・アーカイブ済み)、② ③ の成功・冪等(履歴件数が増えない)・`invalid_state`・404、発送システム起源の確定・解除が通る、`operator` の記録(受払・オーダー履歴)、⑤ `:id` の 200/404/不正 ID、`?external_slip_id=` の複数・0 件・新しい順・パラメータなし 422、壊れた JSON が JSON の 400、`reverse` ルートと存在しないルートが JSON の 404、認証なしは全エンドポイントで 401 |
 | `test/food_vault_web/controllers/api/v1/warehouse_controller_test.exs` / `item_controller_test.exs` | 有効のみ・アーカイブ除外、`item_code` 絞り込み(完全一致・該当なし)、`maker_id`・`maker_name` を含む |
@@ -155,7 +153,7 @@ end
 ## 5. 影響範囲と更新するドキュメント
 
 - 影響範囲: `food_vault` のみ。`food_ship` に変更は無い。Context の変更は、冪等不一致の戻り値(2 要素 → 3 要素)と参照関数の追加のみ。画面(`ShipmentOrderLive.Form`)は `external_slip_id` を渡さないため、戻り値の変更の影響を受けない。`ErrorJSON` の形式変更は API 以外に影響しない(JSON を返す画面が無い)
-- 作業完了後に更新する永続ドキュメント: `functional-design.md`(§7.2 の `errors` 形式の明記、§7.4 の 409 の付加情報)、`architecture.md`(§7 の現状化: `ApiFormat`・`ErrorJSON` の扱い、§13 の環境変数、§16 #6 の「在庫 API」)、`repository-structure.md`(`api/`・`plugs/` の追加)、`development-guidelines.md`(§1.4 の段階 3 に「完了」)、`glossary.md`(サービストークン等、未収載なら追加)
+- 作業完了後に更新する永続ドキュメント: `functional-design.md`(§7.2 の `errors` 形式の明記、§7.4 の 409 の付加情報)、`architecture.md`(§7 の現状化: `render_errors` の JSON 先頭・`ErrorJSON` の扱い、§13 の環境変数、§16 #6 の「在庫 API」)、`repository-structure.md`(`api/`・`plugs/` の追加)、`development-guidelines.md`(§1.4 の段階 3 に「完了」)、`glossary.md`(サービストークン等、未収載なら追加)
 
 ## 6. 決定した未確定事項(requirements.md の「未確定」への回答)
 
@@ -164,5 +162,5 @@ end
 | トークンの設定キー・デフォルト | `config :food_vault, FoodVaultWeb.Plugs.ServiceTokenAuth, tokens: [...]`。dev は `runtime.exs` の既定値 `dev-inventory-api-token`、test は `test.exs` の 2 つ |
 | ID からの取得 | `fetch_shipment_order/1`(ULID 形式検証つき、`{:error, :not_found}`)を新設。`get_shipment_order!/1` は画面用に残す |
 | `operator` の検証 | Controller 側の `Api.Operator`。`Request` には入れない(`Request` は引当の入力専用) |
-| 壊れた JSON・存在しないルート | `ApiFormat` plug で `/api/` を json に固定し、`ErrorJSON` を共通形式にする |
+| 壊れた JSON・存在しないルート | `render_errors` の JSON 先頭 + `ErrorJSON` を共通形式にする(`ApiFormat` plug は採用せず) |
 | ⑥⑦ のページング | 付けない |

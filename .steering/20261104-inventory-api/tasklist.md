@@ -12,7 +12,7 @@
 
 - [x] `config/runtime.exs`(`INVENTORY_API_TOKENS`、dev の既定値、prod の未設定で `raise`)、`config/test.exs`(テスト用トークン 2 つ)
 - [x] `FoodVaultWeb.Plugs.ServiceTokenAuth`(`valid_token?/1`、401、`:api` ログ)とテスト
-- [x] `FoodVaultWeb.Api.ErrorResponse`、`FoodVaultWeb.Plugs.ApiFormat`(Endpoint の `Plug.Parsers` の前)とテスト
+- [x] `FoodVaultWeb.Api.ErrorResponse`。`ApiFormat` plug は効果がなかったため採用せず、`config.exs` の `render_errors` を JSON 先頭にした(design.md §2 に理由)。一度コミットした `ApiFormat` は単位 B で削除
 - [x] `ErrorJSON` を共通形式に変更し、テストを更新
 - [x] `OperationLog` が `api_operator` を操作者として扱うようにし、テストを追加
 - [x] `router.ex` の `pipeline :api` に `ServiceTokenAuth` を追加(`/api/v1` スコープは単位 B で Controller と同時に追加する。未定義モジュールの警告を避けるため)
@@ -21,12 +21,12 @@
 
 ## 2. 単位 B: ① 出庫引当・⑤ 照会
 
-- [ ] `ShipmentOrders`: `fetch_shipment_order/1`、`list_shipment_orders_by_slip/1`、`idempotency_conflict` が既存オーダーを返す形に変更(テストの更新と追加)
-- [ ] `FoodVaultWeb.Api.Operator`、`FallbackController`
-- [ ] `ShipmentOrderJSON`(共通のオーダー表現・一覧)
-- [ ] `ShipmentOrderController`: `create`・`show`・`index`
-- [ ] テスト(① の 201/200/409/422、⑤ の `:id` と `?external_slip_id=`、認証なし 401、壊れた JSON・存在しないルート・`reverse` の JSON 404、同時 POST の冪等)
-- [ ] 品質ゲート、コミット・プッシュ
+- [x] `ShipmentOrders`: `fetch_shipment_order/1`、`list_shipment_orders_by_slip/1`、`idempotency_conflict` が既存オーダーを返す形に変更(テストの更新と追加)
+- [x] `FoodVaultWeb.Api.Operator`、`FallbackController`
+- [x] `ShipmentOrderJSON`(共通のオーダー表現・一覧)
+- [x] `ShipmentOrderController`: `create`・`show`・`index`
+- [x] テスト(① の 201/200/409/422、⑤ の `:id` と `?external_slip_id=`、認証なし 401、壊れた JSON・存在しないルート・`reverse` の JSON 404、同時 POST の冪等)
+- [x] 品質ゲート、コミット・プッシュ
 
 ## 3. 単位 C: ② 出庫確定・③ 引当解除
 

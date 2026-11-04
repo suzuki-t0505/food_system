@@ -5,6 +5,9 @@ defmodule FoodVaultWeb.ErrorJSON do
   JSON を返すのは在庫 API だけなので、API の共通エラー形式
   (`FoodVaultWeb.Api.ErrorResponse`)で返す。ルーティング前に起きるエラー
   (存在しないルート、壊れた JSON、`Accept` の不一致)がここに来る。
+
+  `Accept` が無い・`*/*` のリクエストでも JSON になるよう、`config/config.exs` の
+  `render_errors` は JSON を先頭(fallback)にしている。
   """
 
   alias FoodVaultWeb.Api.ErrorResponse
