@@ -553,6 +553,43 @@ query =
 Repo.all(query)
 ```
 
+**`join` を使うクエリは、パイプの `join/5` マクロではなく、キーワード構文の `join:` で書く `[必須]`。**
+バインディングの位置指定（`[o, l, a]`）が不要になり、join を足し引きしても他の句を直さずに済む。
+
+```elixir
+# NG: マクロ形式の join（バインディングを位置で並べる必要がある）
+ShipmentOrder
+|> join(:inner, [o], l in assoc(o, :lines))
+|> join(:inner, [o, l], a in assoc(l, :allocations))
+|> where([o, l, a], a.lot_id == ^lot_id)
+|> Repo.all()
+
+# OK: キーワード構文を query に束ねる
+query =
+  from o in ShipmentOrder,
+    join: l in assoc(o, :lines),
+    join: a in assoc(l, :allocations),
+    where: a.lot_id == ^lot_id
+
+Repo.all(query)
+```
+
+**キーワード構文の `from` は、後ろに続くパイプが 1 つだけの形にしない `[必須]`。**
+パイプにする意味がないので、`query` 変数に束縛してから次の関数に渡す（上の OK 例）。
+後ろに複数のクエリ関数（`where` / `order_by` / `preload` など）を続けるときは、
+パイプでつないでよい（例: 冒頭の `list_fields/1`）。
+
+```elixir
+# NG: from(...) の後ろが Repo.all だけ
+from(a in ShipmentAllocation, where: a.lot_id == ^lot_id)
+|> Repo.all()
+
+# OK
+query = from a in ShipmentAllocation, where: a.lot_id == ^lot_id
+
+Repo.all(query)
+```
+
 ### 6.2 クエリビルダは query を受けて query を返す `[必須]`
 
 絞り込みは `defp {名前}_query(query, params)` に切り出す。**この中で `Repo` を呼んではいけない。**
