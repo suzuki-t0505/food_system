@@ -415,4 +415,165 @@ defmodule FoodVault.InventoriesTest do
       assert ids == [ctx.other.id, ctx.lot.id]
     end
   end
+
+  describe "adjust_inventory/3" do
+    setup do
+      lot = lot_fixture(%{case_qty: 5, piece_qty: 4})
+      %{lot: lot, admin: admin_fixture()}
+    end
+
+    test "増減を反映し、理由と操作者付きで adjust を記録する", %{lot: lot, admin: admin} do
+      assert {:ok, %{lot: adjusted, transaction: tx}} =
+               Inventories.adjust_inventory(admin, lot, %{
+                 "case_diff" => "-2",
+                 "piece_diff" => "3",
+                 "note" => "棚卸差異"
+               })
+
+      assert {adjusted.case_qty, adjusted.piece_qty} == {3, 7}
+
+      assert %{
+               transaction_type: :adjust,
+               case_diff: -2,
+               piece_diff: 3,
+               note: "棚卸差異",
+               user_id: user_id
+             } = tx
+
+      assert user_id == admin.id
+    end
+
+    test "荷まとめ(バラ → ケース)を 1 回の調整として登録できる", %{lot: lot, admin: admin} do
+      # 入数 12: 1 ケース分 = バラ 12。バラが 4 しかないので 12 個は足りない
+      assert {:error, changeset} =
+               Inventories.adjust_inventory(admin, lot, %{
+                 case_diff: 1,
+                 piece_diff: -12,
+                 note: "荷まとめ"
+               })
+
+      assert %{piece_diff: [_]} = errors_on(changeset)
+
+      lot = lot_fixture(%{case_qty: 1, piece_qty: 30})
+
+      assert {:ok, %{lot: bundled}} =
+               Inventories.adjust_inventory(admin, lot, %{
+                 case_diff: 2,
+                 piece_diff: -24,
+                 note: "荷まとめ"
+               })
+
+      assert {bundled.case_qty, bundled.piece_qty} == {3, 6}
+    end
+
+    test "入荷訂正: 誤ったロットの全数を減算して、正しい期限日で再入荷する", %{lot: lot, admin: admin} do
+      {:ok, %{lot: zeroed}} =
+        Inventories.adjust_inventory(admin, lot, %{
+          case_diff: -5,
+          piece_diff: -4,
+          note: "期限日の入力誤り"
+        })
+
+      assert {zeroed.case_qty, zeroed.piece_qty} == {0, 0}
+
+      assert {:ok, %{lot: correct}} =
+               Inventories.receive_inventory(admin, %{
+                 warehouse_id: lot.warehouse_id,
+                 item_id: lot.item_id,
+                 expiration_date: ~D[2027-02-01],
+                 received_date: lot.received_date,
+                 case_qty: 5,
+                 piece_qty: 4
+               })
+
+      refute correct.id == lot.id
+    end
+
+    test "理由が無ければ拒否する", %{lot: lot, admin: admin} do
+      assert {:error, changeset} = Inventories.adjust_inventory(admin, lot, %{case_diff: 1})
+      assert %{note: ["理由を入力してください"]} = errors_on(changeset)
+
+      assert {:error, changeset} =
+               Inventories.adjust_inventory(admin, lot, %{case_diff: 1, note: " "})
+
+      assert %{note: [_]} = errors_on(changeset)
+    end
+
+    test "増減が 0/0 は拒否する", %{lot: lot, admin: admin} do
+      assert {:error, changeset} = Inventories.adjust_inventory(admin, lot, %{note: "x"})
+      assert %{case_diff: [_]} = errors_on(changeset)
+
+      assert {:error, _} =
+               Inventories.adjust_inventory(admin, lot, %{
+                 case_diff: "",
+                 piece_diff: "",
+                 note: "x"
+               })
+    end
+
+    test "有効在庫(現在庫 − 引当済)を下回る減算は拒否し、何も変えない", %{lot: lot, admin: admin} do
+      {:ok, _} =
+        FoodVault.ShipmentOrders.allocate_shipment_order(admin, %{
+          warehouse_id: lot.warehouse_id,
+          shipment_date: ~D[2026-11-15],
+          lines: [%{item_id: lot.item_id, req_cases: 4, req_pieces: 3}]
+        })
+
+      # ケースは 5 のうち 4 が引当済、バラは 4 のうち 3 が引当済
+      assert {:error, changeset} =
+               Inventories.adjust_inventory(admin, lot, %{case_diff: -2, note: "x"})
+
+      assert %{case_diff: [msg]} = errors_on(changeset)
+      assert msg =~ "有効在庫"
+
+      assert {:error, changeset} =
+               Inventories.adjust_inventory(admin, lot, %{piece_diff: -2, note: "x"})
+
+      assert %{piece_diff: [_]} = errors_on(changeset)
+
+      reloaded = Repo.get!(InventoryLot, lot.id)
+      assert {reloaded.case_qty, reloaded.piece_qty} == {5, 4}
+
+      assert Repo.aggregate(
+               from(t in InventoryTransaction, where: t.transaction_type == :adjust),
+               :count
+             ) == 0
+
+      # 有効在庫の範囲内の減算は通る
+      assert {:ok, _} =
+               Inventories.adjust_inventory(admin, lot, %{
+                 case_diff: -1,
+                 piece_diff: -1,
+                 note: "x"
+               })
+    end
+
+    test "admin 以外は拒否し、API の操作者は operator として記録する", %{lot: lot} do
+      staff = user_fixture(%{role: :staff})
+
+      assert {:error, :forbidden} =
+               Inventories.adjust_inventory(staff, lot, %{case_diff: 1, note: "x"})
+
+      assert {:ok, %{transaction: tx}} =
+               Inventories.adjust_inventory({:api, "op@example.com"}, lot, %{
+                 case_diff: 1,
+                 note: "x"
+               })
+
+      assert tx.operator == "op@example.com"
+    end
+
+    test "アーカイブ済みの商品・倉庫のロットは調整できない", %{admin: admin} do
+      lot = lot_fixture(%{case_qty: 1})
+      lot |> Ecto.Changeset.change(case_qty: 0) |> Repo.update!()
+      scope = user_scope_fixture(admin)
+      {:ok, _} = Items.archive_item(scope, Items.get_item!(lot.item_id))
+
+      assert {:error, changeset} =
+               Inventories.adjust_inventory(admin, lot, %{case_diff: 1, note: "x"})
+
+      assert %{case_diff: [msg]} = errors_on(changeset)
+      assert msg =~ "アーカイブ済み"
+    end
+  end
 end

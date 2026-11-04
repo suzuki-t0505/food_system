@@ -51,9 +51,9 @@
 
 ## 5. 単位 E: 棚卸調整(F-V5)
 
-- [ ] `Inventories.adjust_inventory/3`・`change_adjustment/2`・`list_allocating_orders/1`
-- [ ] 画面: `management/inventory_adjustment_live/form.ex`(換算ヘルパー、プレビュー)、ロット詳細に引当オーダーと調整リンク
-- [ ] テスト(理由必須・有効在庫を下回る拒否・荷まとめ・入荷訂正・権限)、品質ゲート、コミット・プッシュ
+- [x] `Inventories.adjust_inventory/3`・`change_adjustment/2`・`list_allocating_orders/1`
+- [x] 画面: `management/inventory_adjustment_live/form.ex`(換算ヘルパー、プレビュー)、ロット詳細に引当オーダーと調整リンク
+- [x] テスト(理由必須・有効在庫を下回る拒否・荷まとめ・入荷訂正・権限)、品質ゲート、コミット・プッシュ
 
 ## 6. 仕上げ
 

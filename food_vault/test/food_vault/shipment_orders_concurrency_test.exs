@@ -119,4 +119,35 @@ defmodule FoodVault.ShipmentOrdersConcurrencyTest do
     assert reloaded.allocated_case_qty == 0
     assert reloaded.case_qty in [1, 3]
   end
+
+  test "引当と棚卸調整(減算)が同時に走っても、引当済数が現在庫を超えない" do
+    warehouse = warehouse_fixture()
+    item = item_fixture()
+    lot = lot_fixture(%{warehouse_id: warehouse.id, item_id: item.id, case_qty: 0, piece_qty: 10})
+    staff = user_fixture(%{role: :staff})
+    admin = admin_fixture()
+
+    results =
+      concurrently(2, fn
+        1 ->
+          {:allocate,
+           ShipmentOrders.allocate_shipment_order(
+             staff,
+             request(warehouse, [%{item_id: item.id, req_pieces: 7}])
+           )}
+
+        2 ->
+          {:adjust,
+           FoodVault.Inventories.adjust_inventory(admin, lot, %{piece_diff: -5, note: "棚卸"})}
+      end)
+
+    {:allocate, allocate} = List.keyfind(results, :allocate, 0)
+    {:adjust, adjust} = List.keyfind(results, :adjust, 0)
+
+    # 先に引当が通れば有効在庫は 3 で調整は拒否、先に調整が通れば残りは 5 で引当は不足
+    assert [match?({:ok, _}, allocate), match?({:ok, _}, adjust)] |> Enum.count(& &1) == 1
+
+    reloaded = Repo.get!(InventoryLot, lot.id)
+    assert reloaded.allocated_piece_qty <= reloaded.piece_qty
+  end
 end

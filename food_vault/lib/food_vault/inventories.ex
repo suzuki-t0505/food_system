@@ -193,6 +193,120 @@ defmodule FoodVault.Inventories do
     )
   end
 
+  ## 棚卸調整
+
+  @adjustment_types %{case_diff: :integer, piece_diff: :integer, note: :string}
+
+  @doc """
+  棚卸調整フォーム用の changeset(スキーマレス)。
+
+  `case_diff` / `piece_diff` は増減値(負数は減算)で、空欄は 0。理由(`note`)は必須。
+  両方 0 の調整は拒否する。有効在庫を下回る減算の検査は `adjust_inventory/3` が
+  ロットをロックしてから行う。
+  """
+  def change_adjustment(attrs \\ %{}) do
+    {%{case_diff: 0, piece_diff: 0, note: nil}, @adjustment_types}
+    |> Ecto.Changeset.cast(attrs, Map.keys(@adjustment_types))
+    |> default_zero(:case_diff)
+    |> default_zero(:piece_diff)
+    |> Ecto.Changeset.validate_required([:note], message: "理由を入力してください")
+    |> Ecto.Changeset.validate_length(:note, max: 255)
+    |> validate_diff_present()
+  end
+
+  defp validate_diff_present(changeset) do
+    cases = Ecto.Changeset.get_field(changeset, :case_diff)
+    pieces = Ecto.Changeset.get_field(changeset, :piece_diff)
+
+    if is_integer(cases) and is_integer(pieces) and cases == 0 and pieces == 0 do
+      Ecto.Changeset.add_error(changeset, :case_diff, "ケース数かバラ数のどちらかは 0 以外にしてください")
+    else
+      changeset
+    end
+  end
+
+  @doc """
+  棚卸調整(`admin` のみ)。ロットを指定してケース数・バラ数を増減する。
+
+  入荷訂正(数量の誤り)と荷まとめ(バラ → ケース。`case_diff = +k`・
+  `piece_diff = -k × 入数`)も、この 1 回の調整として登録する。期限日・入荷日の誤りは、
+  誤ったロットの全数を減算し、正しい期限日・入荷日で再入荷して直す。
+
+  理由は必須で、受払履歴(`adjust`)の `note` に残る。有効在庫(現在庫 − 引当済)を下回る
+  減算はできない。アーカイブ済みの倉庫・商品のロットは調整できない。
+
+  成功: `{:ok, %{lot: lot, transaction: transaction}}`。
+  失敗: `{:error, changeset}`、`{:error, :forbidden}`。
+  """
+  def adjust_inventory(actor, %InventoryLot{} = lot, attrs) do
+    with :ok <- Permission.authorize(actor, :adjust_inventory) do
+      changeset = change_adjustment(attrs)
+
+      if changeset.valid? do
+        actor |> adjustment_multi(lot, changeset) |> Repo.transact() |> unwrap_adjustment()
+      else
+        {:error, %{changeset | action: :insert}}
+      end
+    end
+  end
+
+  defp adjustment_multi(actor, lot, changeset) do
+    diff = Ecto.Changeset.apply_changes(changeset)
+
+    Multi.new()
+    |> Multi.run(:locked, fn _repo, _ -> lock_adjustable_lot(lot, changeset, diff) end)
+    |> Multi.run(:lot, fn _repo, %{locked: locked} ->
+      :ok =
+        update_lot_quantities(locked.id,
+          case_qty: locked.case_qty + diff.case_diff,
+          piece_qty: locked.piece_qty + diff.piece_diff
+        )
+
+      {:ok, Repo.get!(InventoryLot, locked.id)}
+    end)
+    |> Multi.run(:transaction, fn _repo, %{lot: lot} ->
+      record_transaction(actor, lot.id, :adjust, diff.case_diff, diff.piece_diff, note: diff.note)
+    end)
+  end
+
+  # 倉庫 → 商品 → ロットの順にロックし、アーカイブ済みと有効在庫を下回る減算を検査する
+  defp lock_adjustable_lot(lot, changeset, diff) do
+    warehouse = Warehouses.lock_active_warehouse_for_share(lot.warehouse_id)
+    items = Items.lock_active_items_for_share([lot.item_id])
+    [locked] = lock_lots_by_ids([lot.id])
+
+    changeset
+    |> require_present(:case_diff, warehouse, "アーカイブ済みの倉庫のロットは調整できません")
+    |> require_present(:case_diff, List.first(items), "アーカイブ済みの商品のロットは調整できません")
+    |> validate_not_below_allocated(
+      :case_diff,
+      locked.case_qty + diff.case_diff,
+      locked.allocated_case_qty
+    )
+    |> validate_not_below_allocated(
+      :piece_diff,
+      locked.piece_qty + diff.piece_diff,
+      locked.allocated_piece_qty
+    )
+    |> case do
+      %Ecto.Changeset{errors: []} -> {:ok, locked}
+      invalid -> {:error, invalid}
+    end
+  end
+
+  defp validate_not_below_allocated(changeset, field, new_qty, allocated)
+       when new_qty < allocated do
+    Ecto.Changeset.add_error(changeset, field, "有効在庫(現在庫 − 引当済)を下回る減算はできません")
+  end
+
+  defp validate_not_below_allocated(changeset, _field, _new_qty, _allocated), do: changeset
+
+  defp unwrap_adjustment({:ok, %{lot: lot, transaction: transaction}}),
+    do: {:ok, %{lot: lot, transaction: transaction}}
+
+  defp unwrap_adjustment({:error, :locked, %Ecto.Changeset{} = invalid, _changes}),
+    do: {:error, %{invalid | action: :insert}}
+
   ## ロックと受払履歴(ShipmentOrders・棚卸調整と共用)
 
   @doc "操作者を受払履歴・オーダー履歴の `user_id` / `operator` に変換する。"

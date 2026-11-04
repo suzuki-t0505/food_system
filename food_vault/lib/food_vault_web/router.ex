@@ -116,6 +116,8 @@ defmodule FoodVaultWeb.Router do
       live "/warehouses/:id/edit", WarehouseLive.Form, :edit
       live "/items/new", ItemLive.Form, :new
       live "/items/:id/edit", ItemLive.Form, :edit
+
+      live "/inventory_lots/:id/adjustments/new", InventoryAdjustmentLive.Form, :new
     end
   end
 end
