@@ -129,7 +129,7 @@ flowchart TB
 
 | 項目 | 決定 |
 | :-- | :-- |
-| 依存 | `ecto_ulid`（`Ecto.ULID` を提供する Hex パッケージ）を採用候補とする。**着手時に Elixir 1.20 / Ecto 3.13 でコンパイルとテストが通ることを最初に確認**し、通らなければ同等の `Ecto.Type`（26 文字の Crockford Base32 ⇔ 16 バイト）を `{App}.ULID` として自前実装する（外部インターフェースは変えない） |
+| 依存 | **`ecto_ulid_next`**（`Ecto.ULID` を提供する Hex パッケージ。`~> 1.0`）を採用した。Elixir 1.20 / Ecto 3.13 で警告なくコンパイルでき、`{App}.Schema` のテスト（保存・取得・FK・形式検証）が通ることを確認済み |
 | 共通スキーママクロ | `{App}.Schema`（`@primary_key {:id, Ecto.ULID, autogenerate: true}`・`@foreign_key_type Ecto.ULID`）を最初に作り、全スキーマが `use {App}.Schema` する。`use Ecto.Schema` の直書きは禁止（coding-rules §5.1） |
 | DB 列 | マイグレーションは `add :id, :binary_id, primary_key: true` ／ FK は `references(:table, on_delete: :nothing, type: :binary_id)`。PostgreSQL の `uuid` 型（16 バイト）で保存される |
 | `config.exs` | `generators` の `binary_id: true` は残す（マイグレーション生成を `:binary_id` にするため）。ただし `phx.gen.*` が出すスキーマは UUID の `:binary_id` なので、生成後に `use {App}.Schema` へ手で置き換える |
@@ -326,6 +326,7 @@ end
 
 - **Logger はカテゴリ付きのラッパー経由**（`{App}.Utils.Logger`）。カテゴリは `@categories` にホワイトリスト化し、未定義カテゴリは開発環境で例外にする。本番は JSON 形式で出力し、メタデータに `request_id` / `remote_ip` / `mfa` / `file` / `line` を含める。**バッチ処理は開始と終了で必ずログを出す**。
 - **操作ログ**（`OperationLog`）: Web 層から create / update / delete を呼ぶとき、「誰が・いつ・どのページで・どのデータで・何をしたか」を 1 行で残す。**書き込みが成功したときのみ**出力し、`Task` の中では出さず `handle_info` の成功節で出す。メッセージは「ます形＋句点」で、用語は用語集に揃える。
+- **実装**（両アプリの `lib/{app}/utils/`）: カテゴリは `log_in` / `create` / `update` / `delete` / `batch` / `api` / `other`。未定義カテゴリは `raise_on_unknown_category: true`（dev・test）で `ArgumentError`、本番は `false`。本番の JSON 出力は自前の `{App}.Utils.Logger.JSONFormatter`（`Jason`、新規依存なし）で、`request_id` は `Plug.RequestId`、`remote_ip` は `{App}Web.Plugs.LoggerMetadata` が設定する。リバースプロキシ配下の送信元 IP（`X-Forwarded-For`）は本番構成（§16 #3）の決定後に扱う。
 - **機微データのマスクは出力側で自動化**する。`redact: true` のフィールドと `@redact_keys`（`token` / `password` など）、仮想フィールド・未ロードのアソシエーション・`__meta__` を `normalize/1` で除外する。呼び出し側で `Map.drop` する運用にしない。
 - ログイン成功・失敗は `:log_in` カテゴリ。サービストークンの値と `Authorization` ヘッダは出力しない。
 - **業務上の証跡は DB が担う**（在庫: `inventory_transactions` と `shipment_order_events`、発送: 伝票の `*_by_user_id` / `*_at` / `reverse_reason`）。Logger は補助で、ログのローテーション後も誰がいつ何をしたかを DB から追える。
@@ -369,11 +370,11 @@ end
 
 - 開発コマンドは **コンテナ経由**（`docker compose run --rm {service} mix ...`）。`Makefile` の `setup` / `mix_compile` / `mix_format` / `mix_credo` / `mix_test` / `mix_test_cover` / `mix_clean` を使う。
 - **品質ゲート**: ① `mix compile --warnings-as-errors --force`、② `mix format`、③ `mix credo --all`、④ `mix test` を 1 つの `check` にまとめ、プッシュ前に全部パスさせる。CI でも同じ `check` を回す。
-- 現状の不足（実装着手時に整備する）:
-  - `Makefile` に `check` ターゲットが無い（`mix_compile` / `mix_format` / `mix_credo` / `mix_test` のみ）。
-  - 両アプリの `mix.exs` の `deps` に `credo` が無く、`.credo.exs` もリポジトリに無い（`mix_credo` は現状動かない）。`mix credo gen.config` で生成して置く。
-  - `mix.exs` の `precommit` エイリアス（`compile --warnings-as-errors` / `deps.unlock --unused` / `format` / `test`）と `check` の関係を揃える。
-  - PR ワークフロー（GitHub Actions）が無い。lint と test を回すワークフローを追加する。
+- 整備済み:
+  - `Makefile` の `check`（`mix_compile` → `mix_format` → `mix_credo` → `mix_test`）。ローカルの `mix_format` は整形する。
+  - 両アプリの `mix.exs` に `credo`（`only: [:dev, :test]`）、リポジトリに `.credo.exs`。`precommit` エイリアスは `compile --warnings-as-errors` / `deps.unlock --unused` / `format` / `credo --all` / `test`。
+  - PR ワークフロー `.github/workflows/ci.yml`。`pull_request` のみで、アプリごとに compile → `format --check-formatted` → `credo --all` → `test` を実行する（`main` への push では回さない）。実行環境は Elixir 1.20.5 / OTP 29 と `postgres:15.2`。
+  - `config/test.exs` の DB ホストは `PGHOST`（既定 `db`）で上書きできる。
 - `.formatter.exs` は `import_deps`（`:ecto` / `:ecto_sql` / `:phoenix`）と HEEx フォーマッタ（`Phoenix.LiveView.HTMLFormatter`）を設定し、`inputs` に `heex` を含める。
 - `mix test` は毎回 DB を再作成する（`ecto.drop` / `ecto.create` / `ecto.migrate` を alias に含める）。
 
@@ -401,11 +402,11 @@ end
 
 | # | 項目 | 内容 |
 | :-- | :-- | :-- |
-| 1 | ULID 依存の採否 | `ecto_ulid` が Elixir 1.20 / Ecto 3.13 でコンパイル・テストできるかを最初に確認。不可なら自前の `{App}.ULID` |
+| 1 | ULID 依存の採否 | **解決済み**: `ecto_ulid_next` を採用（§4） |
 | 2 | `phx.gen.auth` 生成物の削減範囲 | `deps/` 取得後に生成して確認。`users_tokens` のカラム構成、セッション有効期間の判定が設計（`inserted_at` ベース）と一致するか。ULID 化の手順 |
 | 3 | 本番の構成 | 本番 Dockerfile・リリース・デプロイ先・リバースプロキシ（TLS、`/api` の送信元制限）・Chromium の本番構成が未定 |
 | 4 | PDF のライブラリ最終決定 | `ChromicPDF` を前提に、環境構築セッションで確定。サンドボックス、プール数、タイムアウト |
-| 5 | 品質ゲートの整備 | `check` ターゲット、`credo` 依存と `.credo.exs`、PR ワークフロー |
+| 5 | 品質ゲートの整備 | **解決済み**: `check`、`credo`、`.credo.exs`、PR ワークフローを整備（§14）。CI の実行は PR を出して初めて確認できる |
 | 6 | 環境変数の命名の確定 | §11 の命名案を実装時に確定し、`runtime.exs` に反映 |
 | 7 | 在庫 0 ロットの整理 | 長期運用での肥大化対策（アーカイブなど）。運用開始後に決める |
 | 8 | ログイン試行制限・セッション期間・「ログインしたままにする」 | 本バージョン対象外。`phx.gen.auth` の既定（remember me あり）を踏襲するか |

@@ -30,3 +30,10 @@ config :logger, level: :info
 
 # Runtime production configuration, including reading
 # of environment variables, is done on config/runtime.exs.
+
+# 本番は JSON 形式で出力する。未定義のログカテゴリでは落とさない
+config :food_ship, FoodShip.Utils.Logger, raise_on_unknown_category: false
+
+config :logger, :default_handler,
+  formatter:
+    {FoodShip.Utils.Logger.JSONFormatter, metadata: [:request_id, :remote_ip, :mfa, :file, :line]}

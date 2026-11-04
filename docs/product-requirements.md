@@ -428,7 +428,7 @@
 - 技術スタック: Elixir 1.20.5 / Erlang 29 / Phoenix 1.8.16 / LiveView / Tailwind CSS / PostgreSQL 15 / Docker Compose。コーディング規約は [coding-rules.md](coding-rules.md)
 - 2 アプリは別プロジェクト・別 DB・別コンテナ。連携は、発送 → 在庫の一方向 HTTP（JSON API）のみ。DB 共有・Erlang クラスタは使わない
 - PDF 帳票の実行環境（Chromium・日本語フォント・ライブラリ）は別セッションで構築する。設計上の前提（外部リソース禁止、サンドボックス、負荷上限、表示確認）は発送側設計書 §8.2 に定めた
-- ULID 依存（`ecto_ulid` を候補）の採否は実装着手時に検証する
+- ULID 依存は `ecto_ulid_next` を採用した（[architecture.md §4](architecture.md#4-ulid-基盤)）
 
 ## 未決事項
 
