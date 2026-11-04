@@ -60,14 +60,14 @@
 
 ## 受け入れ条件
 
-- [ ] 認証: トークンなし・不正は 401 `unauthorized`、正しいトークン(複数のうちいずれか)は通る。`INVENTORY_API_TOKENS` 未設定の本番設定は起動時に失敗する。ブラウザ用の画面・セッションは API の認証に影響しない
-- [ ] ①: 201 でオーダー表現(`allocations` 付き)を返す。再送(一致)は 200、不一致は 409 `idempotency_conflict`(`order_id`・`status` 付き)。在庫不足は 422 `insufficient_stock`(全明細分の `shortages`)で DB が変わらない。`operator` 欠落・不正な ID・アーカイブ済みは 422 `validation_failed`
-- [ ] ②③: 状態遷移と冪等(すでにその状態なら 200・履歴追加なし、それ以外は 409 `invalid_state`)。`operator` は受払履歴・オーダー履歴に残る。発送システム起源のオーダーを API から確定・解除できる
-- [ ] ⑤: `:id` で 200 / 404(存在しない・ID 形式不正)。`?external_slip_id=` で複数件(新しい順)・0 件(空配列で 200)。パラメータなしの一覧は 422
-- [ ] ⑥⑦: 有効なもののみ返す。⑦ は `item_code` で絞り込め、`maker_id`・`maker_name` を含む
-- [ ] 全エンドポイントで、エラー応答が共通形式(`error`・`message`・付加情報)。存在しないルートも JSON の 404。ボディの JSON が壊れていても 500 にしない
-- [ ] トークンの値が Logger 出力に含まれない
-- [ ] テスト: Controller(各エンドポイントの成功・各エラー)、`ServiceTokenAuth`、`FallbackController`/JSON の変換、同時 POST の冪等(500 にならない)。`make check` 相当(compile 警告ゼロ・format 差分なし・credo・test)が `food_vault` で通り、`food_ship` に影響しない
+- [x] 認証: トークンなし・不正は 401 `unauthorized`、正しいトークン(複数のうちいずれか)は通る。`INVENTORY_API_TOKENS` 未設定の本番設定は起動時に失敗する。ブラウザ用の画面・セッションは API の認証に影響しない
+- [x] ①: 201 でオーダー表現(`allocations` 付き)を返す。再送(一致)は 200、不一致は 409 `idempotency_conflict`(`order_id`・`status` 付き)。在庫不足は 422 `insufficient_stock`(全明細分の `shortages`)で DB が変わらない。`operator` 欠落・不正な ID・アーカイブ済みは 422 `validation_failed`
+- [x] ②③: 状態遷移と冪等(すでにその状態なら 200・履歴追加なし、それ以外は 409 `invalid_state`)。`operator` は受払履歴・オーダー履歴に残る。発送システム起源のオーダーを API から確定・解除できる
+- [x] ⑤: `:id` で 200 / 404(存在しない・ID 形式不正)。`?external_slip_id=` で複数件(新しい順)・0 件(空配列で 200)。パラメータなしの一覧は 422
+- [x] ⑥⑦: 有効なもののみ返す。⑦ は `item_code` で絞り込め、`maker_id`・`maker_name` を含む
+- [x] 全エンドポイントで、エラー応答が共通形式(`error`・`message`・付加情報)。存在しないルートも JSON の 404。ボディの JSON が壊れていても 500 にしない
+- [x] トークンの値が Logger 出力に含まれない
+- [x] テスト: Controller(各エンドポイントの成功・各エラー)、`ServiceTokenAuth`、`FallbackController`/JSON の変換、同時 POST の冪等(500 にならない)。`make check` 相当(compile 警告ゼロ・format 差分なし・credo・test)が `food_vault` で通り、`food_ship` に影響しない
 
 ## スコープ外
 

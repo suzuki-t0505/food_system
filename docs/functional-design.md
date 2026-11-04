@@ -747,7 +747,7 @@ sequenceDiagram
 | 409 | `invalid_state` | 状態遷移として不正。出庫取消で対象の商品・倉庫がアーカイブ済みの場合も | 在庫側へ照会して最新化 |
 | 409 | `idempotency_conflict` | 同じ `external_slip_id` の既存オーダーと内容が異なる。応答に既存の `order_id` と `status` を含む | 既存を照会し、解除してから再引当 |
 | 422 | `insufficient_stock` | 期限条件を満たす在庫が不足（ロールバック済み）。`shortages` は不足した全明細分 | `shortage` で保存 |
-| 422 | `validation_failed` | 入力不正（数量が負、明細が空、`operator` 欠落、ボディの ID 形式不正、アーカイブ済みの商品・倉庫など）。`errors` に項目別メッセージ | 入力エラーとして表示 |
+| 422 | `validation_failed` | 入力不正（数量が負、明細が空、`operator` 欠落、ボディの ID 形式不正、アーカイブ済みの商品・倉庫など）。`errors` に項目別メッセージ（`[{ "path": ["lines", 0, "req_cases"], "message": "..." }]`。`path` は入力のキーと明細の位置） | 入力エラーとして表示 |
 
 ### 7.5 呼び出し方針（発送側 `FoodShip.Inventory.Client`）
 

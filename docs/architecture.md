@@ -215,14 +215,19 @@ end
 
 - `FoodVaultWeb.Plugs.ServiceTokenAuth`（モジュール plug）。`Authorization: Bearer <token>` を読み、設定のトークン一覧のいずれかと **`Plug.Crypto.secure_compare/2`**（定数時間）で比較する。一致しなければ 401 `unauthorized` で `halt`。
 - トークン一覧は環境変数 `INVENTORY_API_TOKENS`（カンマ区切り・複数可）。**ローテーション**は「新トークンを追加（旧と併存）→ 発送側の設定を切り替え → 旧を削除」。
+- 設定は `config :food_vault, FoodVaultWeb.Plugs.ServiceTokenAuth, tokens: [...]`。dev は `runtime.exs` の既定値（`dev-inventory-api-token`）、test は `test.exs`、**本番は `INVENTORY_API_TOKENS` が未設定（空）なら `runtime.exs` で起動時に `raise`**。トークンは運用者が用意する固定値で、システムでは発行しない（DB 発行・有効期限は将来機能。照合は `valid_token?/1` の 1 関数に閉じ込めてある）。
+- 全登録トークンと比較してから判定する（一致位置が応答時間に出ない）。失敗時は 401 に `www-authenticate: Bearer` を付け、`:api` カテゴリで `warn` する。
 - トークンの値はログに出さない（`Authorization` ヘッダを出力しない）。
 - 本番は TLS を終端し、`/api` を発送システムの送信元（社内ネットワーク）に限定する（リバースプロキシ）。
 
 ### 7.3 エラー形式の統一
 
-- `FoodVaultWeb.Api.FallbackController`（`action_fallback`）で、Context の戻り値を共通形式 `{ "error": "<code>", "message": "<説明>", ...付加情報 }` に変換する。`ErrorJSON` の既定形式（`%{errors: %{detail: ...}}`）は API では使わない。
+- `FoodVaultWeb.Api.FallbackController`（`action_fallback`）で、Context の戻り値を共通形式 `{ "error": "<code>", "message": "<説明>", ...付加情報 }` に変換する。本文は `FoodVaultWeb.Api.ErrorResponse.body/3` の 1 か所で作る（認証 plug・`ErrorJSON` も使う）。
+- ルーティング前に起きるエラー（存在しないルート、壊れた JSON）は Endpoint が `ErrorJSON` で描画するため、**`ErrorJSON` も共通形式**にしている（`%{errors: %{detail: ...}}` の既定形式は使わない）。`Accept` が無い・`*/*` のクライアントにも JSON を返すよう、`config.exs` の `render_errors` は **`json` を先頭**（fallback）にしている。ブラウザ（`Accept: text/html`）は HTML のまま。`Plug.Parsers` の例外は Endpoint 直下で拾われ、手前の plug で `put_format` しても反映されないため、plug ではなくこの設定で解決している。
 - 対応: `{:error, :not_found}` → 404 `not_found`、`{:error, :invalid_state}` → 409 `invalid_state`、`{:error, :idempotency_conflict, order}` → 409（既存の `order_id` と `status` を含む）、`{:error, :insufficient_stock, shortages}` → 422、`{:error, %Ecto.Changeset{}}` → 422 `validation_failed`（`errors` に項目別）。
-- 不正な ID 形式（パス）は 404、ボディの ID は 422。存在しないルートも同じ形式で 404 を返す。
+- 不正な ID 形式（パス）は 404、ボディの ID は 422。存在しないルートも同じ形式で 404 を返す。`{:error, %Ecto.Changeset{}}` の節は作っていない（`validation_failed` は `Request` が返す `[%{path, message}]` を `errors` にそのまま出す）。
+- `{:error, :idempotency_conflict, order}` は Context が既存オーダー（`id`・`status`）を返し、409 の `order_id`・`status` に使う（競合の再比較で既存が見つからない稀なケースだけ `nil` で、付加情報なしの 409）。ID 取得は `ShipmentOrders.fetch_shipment_order/1`（ULID 形式でない・不存在は `{:error, :not_found}`）、照会は `list_shipment_orders_by_slip/1`（取消済みを含め新しい順）。
+- `operator`（最大 255 文字・必須）と任意の `reason` は `FoodVaultWeb.Api.Operator` で検証し、成功時のみ `OperationLog` に `api_operator` として残す（冪等な再送では記録しない）。
 - 共通のオーダー表現（レスポンス）は `FoodVaultWeb.Api.V1.ShipmentOrderJSON` に 1 か所で定義し、①②③④⑤ から呼ぶ。
 
 ---
@@ -409,7 +414,8 @@ end
 | 3 | 本番の構成 | 本番 Dockerfile・リリース・デプロイ先・リバースプロキシ（TLS、`/api` の送信元制限）・Chromium の本番構成が未定 |
 | 4 | PDF のライブラリ最終決定 | `ChromicPDF` を前提に、環境構築セッションで確定。サンドボックス、プール数、タイムアウト |
 | 5 | 品質ゲートの整備 | **解決済み**: `check`、`credo`、`.credo.exs`、PR ワークフローを整備（§14）。CI の実行は PR を出して初めて確認できる |
-| 6 | 環境変数の命名の確定 | **一部解決**: `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` を確定し `runtime.exs` に反映済み（段階 1）。在庫 API 関連は段階 3・4 で確定 |
+| 6 | 環境変数の命名の確定 | **一部解決**: `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` を確定し `runtime.exs` に反映済み（段階 1）。在庫 API 関連は、在庫側の `INVENTORY_API_TOKENS` を段階 3 で確定・反映済み（`runtime.exs`。dev は既定値あり、本番は必須）。発送側の `INVENTORY_API_*` は段階 4 |
 | 7 | 在庫 0 ロットの整理 | 長期運用での肥大化対策（アーカイブなど）。運用開始後に決める |
 | 8 | ログイン試行制限・セッション期間・「ログインしたままにする」 | **解決済み（一部対象外）**: セッション期間と remember me は `phx.gen.auth` の既定を踏襲（§8.1）。ログイン試行制限は引き続き対象外（P2） |
 | 9 | 在庫側の核の実装（段階 2） | **解決済み**: ページングは `scrivener_ecto`（`Repo` に `use Scrivener, page_size: 20`）。並行テストは `ConcurrencyCase`（`sandbox: false` で実コミット、`async: false`、後始末は `TRUNCATE`）。追記専用は DB トリガー（`forbid_update_delete()`）でも担保。在庫 0 のロットは引当済数も 0（CHECK 制約）なので、商品・倉庫のアーカイブ規則の「`allocated` なオーダーに含まれない」は在庫 0 の検査で満たされる |
+| 10 | 在庫 API の実装（段階 3） | **解決済み**: ①②③⑤⑥⑦ を `/api/v1` に実装（④ 出庫取消は段階 5）。認証・共通エラー形式・`operator` の扱いは §7。Endpoint レベルのエラー（壊れた JSON など）を JSON にするため `render_errors` を JSON 先頭にした。本番の TLS 終端と `/api` の送信元制限は #3 の本番構成の決定後 |

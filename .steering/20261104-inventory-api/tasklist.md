@@ -43,6 +43,6 @@
 
 ## 5. 仕上げ
 
-- [ ] `make check` 相当を `food_vault` で実行し、`food_ship` に影響が無いことを確認(`food_ship` のテストも実行)
-- [ ] 永続ドキュメントを更新(`functional-design.md`・`architecture.md`・`repository-structure.md`・`development-guidelines.md`・`glossary.md`)
-- [ ] requirements.md の受け入れ条件を照合し、tasklist を完了にする
+- [x] `make check` 相当を `food_vault` で実行し(compile 警告ゼロ・format 差分なし・credo 指摘なし・447 テスト通過)、`food_ship`(150 テスト通過)に影響が無いことを確認。実サーバー(Bandit)に curl で 401・壊れた JSON・存在しないルート・ブラウザの HTML 404 を確認。本番設定の `INVENTORY_API_TOKENS` 未設定による `raise` は `Config.Reader` で確認(自動テストにはしていない)
+- [x] 永続ドキュメントを更新(`functional-design.md`・`architecture.md`・`repository-structure.md`・`development-guidelines.md`・`glossary.md`)
+- [x] requirements.md の受け入れ条件を照合し、tasklist を完了にする
