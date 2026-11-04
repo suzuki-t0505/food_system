@@ -28,6 +28,8 @@ defmodule FoodVaultWeb.Router do
     resources "/shipment_orders", ShipmentOrderController, only: [:create, :show, :index]
     post "/shipment_orders/:id/ship", ShipmentOrderController, :ship
     post "/shipment_orders/:id/cancel", ShipmentOrderController, :cancel
+    get "/warehouses", WarehouseController, :index
+    get "/items", ItemController, :index
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development

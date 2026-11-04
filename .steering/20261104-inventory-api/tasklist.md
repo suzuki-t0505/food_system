@@ -36,10 +36,10 @@
 
 ## 4. 単位 D: ⑥ 倉庫・⑦ 商品
 
-- [ ] `Items.search_active_items/1` とテスト
-- [ ] `WarehouseController`・`ItemController` と JSON ビュー
-- [ ] テスト(有効のみ、`item_code` 絞り込み、`maker_id`・`maker_name`)
-- [ ] 品質ゲート、コミット・プッシュ
+- [x] `Items.search_active_items/1` とテスト
+- [x] `WarehouseController`・`ItemController` と JSON ビュー
+- [x] テスト(有効のみ、`item_code` 絞り込み、`maker_id`・`maker_name`)
+- [x] 品質ゲート、コミット・プッシュ
 
 ## 5. 仕上げ
 
