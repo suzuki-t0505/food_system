@@ -57,7 +57,7 @@
 
 ## 6. 仕上げ
 
-- [ ] `seeds.exs` に開発用マスタを追加(冪等)
-- [ ] `make check` を両アプリで実行し、`food_ship` に影響が無いことを確認
-- [ ] 永続ドキュメントを更新(`repository-structure.md`・`architecture.md`・`development-guidelines.md`・`glossary.md`)
-- [ ] requirements.md の受け入れ条件を照合し、tasklist を完了にする
+- [x] `seeds.exs` に開発用マスタを追加(冪等)
+- [x] `make check` 相当(compile `--warnings-as-errors`・format・`credo --all`・test)を `food_vault` で実行し、`food_ship` に影響が無いこと(150 テスト通過・差分なし)を確認。この環境では `docker compose` がビルドできないため、コンテナを直接起動して同じコマンドを実行した
+- [x] 永続ドキュメントを更新(`repository-structure.md`・`architecture.md`・`development-guidelines.md`・`glossary.md`)
+- [x] requirements.md の受け入れ条件を照合し、tasklist を完了にする
