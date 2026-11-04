@@ -27,6 +27,33 @@ defmodule FoodVaultWeb.Api.V1.ShipmentOrderController do
     end
   end
 
+  @doc "② 出庫確定。すでに `shipped` なら 200 で現状を返す(履歴は追加しない)。"
+  def ship(conn, %{"id" => id} = params) do
+    with {:ok, operator} <- Operator.fetch(params),
+         {:ok, order} <- ShipmentOrders.fetch_shipment_order(id),
+         {:ok, %{shipment_order: order, replayed?: replayed?}} <-
+           ShipmentOrders.ship_shipment_order({:api, operator}, order) do
+      conn = assign(conn, :api_operator, operator)
+      unless replayed?, do: OperationLog.info(conn, "出庫を確定しました。", :update, order)
+
+      render(conn, :show, order: order)
+    end
+  end
+
+  @doc "③ 引当解除。すでに `cancelled` なら 200 で現状を返す。`reason` は任意。"
+  def cancel(conn, %{"id" => id} = params) do
+    with {:ok, operator} <- Operator.fetch(params),
+         {:ok, reason} <- Operator.fetch_reason(params),
+         {:ok, order} <- ShipmentOrders.fetch_shipment_order(id),
+         {:ok, %{shipment_order: order, replayed?: replayed?}} <-
+           ShipmentOrders.cancel_shipment_order({:api, operator}, order, reason: reason) do
+      conn = assign(conn, :api_operator, operator)
+      unless replayed?, do: OperationLog.info(conn, "引当を解除しました。", :update, order)
+
+      render(conn, :show, order: order)
+    end
+  end
+
   @doc "⑤ 状態・引当結果の照会(`:id`)。"
   def show(conn, %{"id" => id}) do
     with {:ok, order} <- ShipmentOrders.fetch_shipment_order(id) do

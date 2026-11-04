@@ -1,6 +1,7 @@
 defmodule FoodVaultWeb.Api.V1.ShipmentOrderControllerTest do
   use FoodVaultWeb.ConnCase, async: true
 
+  import Ecto.Query, only: [from: 2]
   import FoodVault.InventoriesFixtures
   import FoodVault.MastersFixtures
 
@@ -317,6 +318,205 @@ defmodule FoodVaultWeb.Api.V1.ShipmentOrderControllerTest do
       conn = get(api_conn(), "#{@path}?external_slip_id[]=a")
 
       assert %{"error" => "validation_failed"} = json_response(conn, 422)
+    end
+  end
+
+  defp create_order!(ctx, extra \\ %{}) do
+    json_response(post_json(api_conn(), @path, body(ctx, extra)), 201)
+  end
+
+  describe "POST /api/v1/shipment_orders/:id/ship (② 出庫確定)" do
+    test "200 で shipped のオーダー表現を返し、在庫・履歴を更新する", ctx do
+      %{"order_id" => id} = create_order!(ctx)
+
+      conn = post_json(api_conn(), "#{@path}/#{id}/ship", %{"operator" => "packer@example.com"})
+
+      assert %{"order_id" => ^id, "status" => "shipped", "shipped_at" => shipped_at} =
+               json_response(conn, 200)
+
+      assert {:ok, _, _} = DateTime.from_iso8601(shipped_at)
+
+      # 荷崩し後のケース 4・バラ 12 から、引当分(ケース 1・バラ 3)が出庫される
+      lot = Inventories.get_inventory_lot!(ctx.lot.id)
+      assert {lot.case_qty, lot.piece_qty} == {3, 9}
+      assert {lot.allocated_case_qty, lot.allocated_piece_qty} == {0, 0}
+
+      order = ShipmentOrders.get_shipment_order!(id)
+
+      assert Enum.map(order.events, &{&1.event_type, &1.operator}) == [
+               {:created, "staff@example.com"},
+               {:shipped, "packer@example.com"}
+             ]
+
+      assert [%{operator: "packer@example.com", case_diff: -1, piece_diff: -3}] =
+               Repo.all(
+                 from t in InventoryTransaction,
+                   where: t.shipment_order_id == ^id and t.transaction_type == :ship
+               )
+    end
+
+    test "すでに shipped なら 200 で現状を返し、履歴を増やさない", ctx do
+      %{"order_id" => id} = create_order!(ctx)
+      params = %{"operator" => "packer@example.com"}
+
+      first = json_response(post_json(api_conn(), "#{@path}/#{id}/ship", params), 200)
+      events = Repo.aggregate(ShipmentOrderEvent, :count)
+      transactions = Repo.aggregate(InventoryTransaction, :count)
+
+      second = json_response(post_json(api_conn(), "#{@path}/#{id}/ship", params), 200)
+
+      assert second == first
+      assert Repo.aggregate(ShipmentOrderEvent, :count) == events
+      assert Repo.aggregate(InventoryTransaction, :count) == transactions
+    end
+
+    test "cancelled からは 409 invalid_state", ctx do
+      %{"order_id" => id} = create_order!(ctx)
+      post_json(api_conn(), "#{@path}/#{id}/cancel", %{"operator" => "a"})
+
+      conn = post_json(api_conn(), "#{@path}/#{id}/ship", %{"operator" => "a"})
+
+      assert %{"error" => "invalid_state", "message" => _} = json_response(conn, 409)
+    end
+
+    test "発送システム起源(external_slip_id あり)のオーダーも API から確定できる", ctx do
+      %{"order_id" => id, "external_slip_id" => "SLIP-1"} = create_order!(ctx)
+
+      conn = post_json(api_conn(), "#{@path}/#{id}/ship", %{"operator" => "a"})
+
+      assert %{"status" => "shipped"} = json_response(conn, 200)
+    end
+
+    test "operator が無いは 422、存在しない・形式不正の ID は 404", ctx do
+      %{"order_id" => id} = create_order!(ctx)
+
+      conn = post_json(api_conn(), "#{@path}/#{id}/ship", %{})
+
+      assert %{"error" => "validation_failed", "errors" => [%{"path" => ["operator"]}]} =
+               json_response(conn, 422)
+
+      assert ShipmentOrders.get_shipment_order!(id).status == :allocated
+
+      for bad_id <- [Ecto.ULID.generate(), "not-a-ulid"] do
+        conn = post_json(api_conn(), "#{@path}/#{bad_id}/ship", %{"operator" => "a"})
+        assert %{"error" => "not_found"} = json_response(conn, 404)
+      end
+    end
+
+    test "本文なしでも 500 にならず 422", ctx do
+      %{"order_id" => id} = create_order!(ctx)
+
+      conn = post(api_conn(), "#{@path}/#{id}/ship")
+
+      assert %{"error" => "validation_failed"} = json_response(conn, 422)
+    end
+  end
+
+  describe "POST /api/v1/shipment_orders/:id/cancel (③ 引当解除)" do
+    test "200 で cancelled のオーダー表現を返し、引当明細は残して引当済数だけ戻す", ctx do
+      %{"order_id" => id} = create_order!(ctx)
+
+      conn =
+        post_json(api_conn(), "#{@path}/#{id}/cancel", %{
+          "operator" => "ship@example.com",
+          "reason" => "顧客都合"
+        })
+
+      assert %{"status" => "cancelled", "lines" => [%{"allocations" => [_]}]} =
+               json_response(conn, 200)
+
+      # 荷崩しは戻らないので現在庫はそのまま(ケース 4・バラ 12)。引当済数だけ 0 に戻る
+      lot = Inventories.get_inventory_lot!(ctx.lot.id)
+      assert {lot.case_qty, lot.piece_qty} == {4, 12}
+      assert {lot.allocated_case_qty, lot.allocated_piece_qty} == {0, 0}
+
+      order = ShipmentOrders.get_shipment_order!(id)
+
+      assert Enum.map(order.events, &{&1.event_type, &1.operator, &1.reason}) == [
+               {:created, "staff@example.com", nil},
+               {:cancelled, "ship@example.com", "顧客都合"}
+             ]
+    end
+
+    test "reason は任意(空白のみは nil)", ctx do
+      %{"order_id" => id} = create_order!(ctx)
+
+      conn =
+        post_json(api_conn(), "#{@path}/#{id}/cancel", %{"operator" => "a", "reason" => "  "})
+
+      assert %{"status" => "cancelled"} = json_response(conn, 200)
+
+      assert [_, %{event_type: :cancelled, reason: nil}] =
+               ShipmentOrders.get_shipment_order!(id).events
+    end
+
+    test "reason が文字列でない・256 文字以上は 422", ctx do
+      %{"order_id" => id} = create_order!(ctx)
+
+      for reason <- [123, String.duplicate("あ", 256)] do
+        conn =
+          post_json(api_conn(), "#{@path}/#{id}/cancel", %{"operator" => "a", "reason" => reason})
+
+        assert %{"error" => "validation_failed", "errors" => [%{"path" => ["reason"]}]} =
+                 json_response(conn, 422)
+      end
+
+      assert ShipmentOrders.get_shipment_order!(id).status == :allocated
+    end
+
+    test "すでに cancelled なら 200 で現状を返し、履歴を増やさない", ctx do
+      %{"order_id" => id} = create_order!(ctx)
+      params = %{"operator" => "a"}
+
+      first = json_response(post_json(api_conn(), "#{@path}/#{id}/cancel", params), 200)
+      events = Repo.aggregate(ShipmentOrderEvent, :count)
+
+      second = json_response(post_json(api_conn(), "#{@path}/#{id}/cancel", params), 200)
+
+      assert second == first
+      assert Repo.aggregate(ShipmentOrderEvent, :count) == events
+    end
+
+    test "shipped からは 409 invalid_state", ctx do
+      %{"order_id" => id} = create_order!(ctx)
+      post_json(api_conn(), "#{@path}/#{id}/ship", %{"operator" => "a"})
+
+      conn = post_json(api_conn(), "#{@path}/#{id}/cancel", %{"operator" => "a"})
+
+      assert %{"error" => "invalid_state"} = json_response(conn, 409)
+    end
+
+    test "operator が無いは 422、存在しない ID は 404", ctx do
+      %{"order_id" => id} = create_order!(ctx)
+
+      conn = post_json(api_conn(), "#{@path}/#{id}/cancel", %{"reason" => "x"})
+      assert %{"error" => "validation_failed"} = json_response(conn, 422)
+
+      conn =
+        post_json(api_conn(), "#{@path}/#{Ecto.ULID.generate()}/cancel", %{"operator" => "a"})
+
+      assert %{"error" => "not_found"} = json_response(conn, 404)
+    end
+
+    test "解除後は、同じ external_slip_id で再度引当できる", ctx do
+      %{"order_id" => id} = create_order!(ctx)
+      post_json(api_conn(), "#{@path}/#{id}/cancel", %{"operator" => "a"})
+
+      assert %{"order_id" => new_id} = create_order!(ctx)
+      refute new_id == id
+    end
+  end
+
+  describe "認証(② ③)" do
+    test "トークンなしは 401", ctx do
+      %{"order_id" => id} = create_order!(ctx)
+
+      for action <- ["ship", "cancel"] do
+        conn = post(unauthenticated_api_conn(), "#{@path}/#{id}/#{action}", ~s({"operator":"a"}))
+        assert %{"error" => "unauthorized"} = json_response(conn, 401)
+      end
+
+      assert ShipmentOrders.get_shipment_order!(id).status == :allocated
     end
   end
 

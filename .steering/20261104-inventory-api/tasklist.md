@@ -30,9 +30,9 @@
 
 ## 3. 単位 C: ② 出庫確定・③ 引当解除
 
-- [ ] `ShipmentOrderController`: `ship`・`cancel`(`operator`・`reason` の検証、`OperationLog`)
-- [ ] テスト(状態遷移・冪等・`invalid_state`・404・発送システム起源の確定・解除・履歴に `operator` が残る)
-- [ ] 品質ゲート、コミット・プッシュ
+- [x] `ShipmentOrderController`: `ship`・`cancel`(`operator`・`reason` の検証、`OperationLog`)
+- [x] テスト(状態遷移・冪等・`invalid_state`・404・発送システム起源の確定・解除・履歴に `operator` が残る)
+- [x] 品質ゲート、コミット・プッシュ
 
 ## 4. 単位 D: ⑥ 倉庫・⑦ 商品
 

@@ -26,6 +26,8 @@ defmodule FoodVaultWeb.Router do
 
     # index は ?external_slip_id= の照会専用
     resources "/shipment_orders", ShipmentOrderController, only: [:create, :show, :index]
+    post "/shipment_orders/:id/ship", ShipmentOrderController, :ship
+    post "/shipment_orders/:id/cancel", ShipmentOrderController, :cancel
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
