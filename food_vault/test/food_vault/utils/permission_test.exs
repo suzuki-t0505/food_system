@@ -52,12 +52,40 @@ defmodule FoodVault.Utils.PermissionTest do
       assert Permission.can?(@viewer, :change_own_password)
     end
 
+    test "業務アクションのロール別の許可" do
+      matrix = [
+        # {action, admin, staff, viewer}
+        {:manage_masters, true, false, false},
+        {:receive_inventory, true, true, false},
+        {:manage_shipment_order, true, true, false},
+        {:adjust_inventory, true, false, false}
+      ]
+
+      for {action, admin, staff, viewer} <- matrix do
+        assert Permission.can?(@admin, action) == admin
+        assert Permission.can?(@staff, action) == staff
+        assert Permission.can?(@viewer, action) == viewer
+      end
+    end
+
     test "未定義のアクションは拒否する" do
       refute Permission.can?(@admin, :no_such_action)
     end
 
     test "nil は拒否する" do
       refute Permission.can?(nil, :emergency_ship_order)
+    end
+  end
+
+  describe "authorize/2" do
+    test "画面のユーザーは can?/2 に従う" do
+      assert Permission.authorize(@admin, :manage_masters) == :ok
+      assert Permission.authorize(@staff, :manage_masters) == {:error, :forbidden}
+      assert Permission.authorize(nil, :manage_masters) == {:error, :forbidden}
+    end
+
+    test "API の操作者は許可する" do
+      assert Permission.authorize({:api, "staff@example.com"}, :adjust_inventory) == :ok
     end
   end
 end

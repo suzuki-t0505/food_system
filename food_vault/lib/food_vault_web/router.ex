@@ -72,6 +72,13 @@ defmodule FoodVaultWeb.Router do
     pipe_through [:browser, :require_authenticated_user]
 
     get "/", PageController, :home
+
+    live_session :require_authenticated_user,
+      on_mount: [{FoodVaultWeb.UserAuth, :ensure_authenticated}] do
+      live "/masters/makers", MakerLive.Index, :index
+      live "/masters/warehouses", WarehouseLive.Index, :index
+      live "/masters/items", ItemLive.Index, :index
+    end
   end
 
   ## admin 専用
@@ -84,6 +91,13 @@ defmodule FoodVaultWeb.Router do
       live "/users", UserLive.Index, :index
       live "/users/new", UserLive.Form, :new
       live "/users/:id/reset_password", UserLive.Form, :reset_password
+
+      live "/makers/new", MakerLive.Form, :new
+      live "/makers/:id/edit", MakerLive.Form, :edit
+      live "/warehouses/new", WarehouseLive.Form, :new
+      live "/warehouses/:id/edit", WarehouseLive.Form, :edit
+      live "/items/new", ItemLive.Form, :new
+      live "/items/:id/edit", ItemLive.Form, :edit
     end
   end
 end

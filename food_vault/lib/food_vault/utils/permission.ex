@@ -15,7 +15,15 @@ defmodule FoodVault.Utils.Permission do
     # ユーザー管理(登録・ロール変更・パスワード再設定・アーカイブ)
     manage_users: :admin,
     # 発送システム起源オーダーの画面での確定・引当解除
-    emergency_ship_order: :admin
+    emergency_ship_order: :admin,
+    # メーカー・倉庫・商品の編集・アーカイブ・復帰
+    manage_masters: :admin,
+    # 入荷登録
+    receive_inventory: :staff,
+    # 画面登録オーダーの登録・出庫確定・引当解除
+    manage_shipment_order: :staff,
+    # 棚卸調整(入荷訂正・荷まとめを含む)
+    adjust_inventory: :admin
   }
 
   @doc "ユーザーが `required` 以上のロールを持つか。"
@@ -33,6 +41,19 @@ defmodule FoodVault.Utils.Permission do
       {:ok, required} -> role_at_least?(user, required)
       :error -> false
     end
+  end
+
+  @doc """
+  Context 内の権限検査。`:ok` または `{:error, :forbidden}` を返す。
+
+  操作者(actor)は画面のユーザー(`%{role: _}`)か、在庫 API の `{:api, operator}`。
+  API はサービストークンで認証済みで、ロールの判定は呼び出し側の責任なので許可する。
+  """
+  @spec authorize(term(), atom()) :: :ok | {:error, :forbidden}
+  def authorize({:api, operator}, _action) when is_binary(operator), do: :ok
+
+  def authorize(user, action) do
+    if can?(user, action), do: :ok, else: {:error, :forbidden}
   end
 
   defp rank(role), do: Enum.find_index(@roles, &(&1 == role))

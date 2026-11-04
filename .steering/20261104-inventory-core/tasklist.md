@@ -4,28 +4,29 @@
 
 ## 0. 共通基盤
 
-- [ ] 実行環境の確認(`docker compose` で `food_vault_web` の `mix test` が動くか)。動かない場合は代替手段を決める
-- [ ] `scrivener_ecto` を追加し、`Repo` に `use Scrivener, page_size: 20`(取得できなければ自作の `paginate` に切り替える)
-- [ ] `Utils.Calc`(`total_pieces`・`effective`・`expiration_label`・`parse_int`)とテスト
-- [ ] `Permission` に `manage_masters`・`receive_inventory`・`manage_shipment_order`・`adjust_inventory` を追加し、テストを更新
-- [ ] `UserAuth.require_authenticated_staff_user/2` を追加し、テストを書く
-- [ ] `Layouts.app` に業務ナビゲーションを追加(リンク先の画面ができた単位で有効化)
+- [x] 実行環境の確認(`docker compose build` はプロキシの CA 未登録で失敗するため、`elixir:1.20.5-otp-29` と `postgres:15.2` を `--network host` で直接起動し、`/root/.ccr/ca-bundle.crt` を `SSL_CERT_FILE`・`HEX_CACERTS_PATH`・git の `http.sslCAInfo` に設定して `mix test` を実行した)
+- [x] `scrivener_ecto` を追加し、`Repo` に `use Scrivener, page_size: 20`(取得できなければ自作の `paginate` に切り替える)
+- [x] `Utils.Calc`(`total_pieces`・`effective`・`expiration_label`・`parse_int`)とテスト
+- [x] `Permission` に `manage_masters`・`receive_inventory`・`manage_shipment_order`・`adjust_inventory` を追加し、テストを更新
+- [x] `UserAuth.require_authenticated_staff_user/2` を追加し、テストを書く
+- [x] `Layouts.app` に業務ナビゲーションを追加(単位ごとにリンクを追加。単位 A はマスタ 3 画面)
 
 ## 1. 単位 A: マスタ管理(F-V1)
 
-- [ ] migration: `makers`・`warehouses`、`items`
-- [ ] `Maker`・`Warehouse`・`Item` スキーマ(`use FoodVault.Schema`、`Ecto.Enum`、`unique_constraint`、ラベル関数)
-- [ ] `Makers`・`Warehouses`・`Items` Context(CRUD、`Scope` 第 1 引数、権限検査、アーカイブ・復帰、`Items.update_item` の `FOR UPDATE` とロット存在ガード、アーカイブ規則)
-- [ ] 規則の検査に必要な `Inventories.any_lots?/1` 等の最小関数(ロット無しの段階では常に偽)を置く
-- [ ] フィクスチャ(`maker_fixture`・`warehouse_fixture`・`item_fixture`)
-- [ ] 画面: `/masters/makers|warehouses|items`(全ロール参照、アーカイブ・復帰の `handle_event`)、`/management/.../new|edit`(admin のフォーム)
-- [ ] `router.ex`(全ロール `live_session`、admin 側の追加)
-- [ ] テスト(Context・LiveView のロール別)、品質ゲート、コミット・プッシュ
+- [x] migration: `makers`・`warehouses`、`items`
+- [x] `Maker`・`Warehouse`・`Item` スキーマ(`use FoodVault.Schema`、`Ecto.Enum`、`unique_constraint`、ラベル関数)
+- [x] `Makers`・`Warehouses`・`Items` Context(CRUD、`Scope` 第 1 引数、権限検査、アーカイブ・復帰、`Items.update_item` の `FOR UPDATE` とロット存在ガード、アーカイブ規則)
+- [x] 規則の検査に必要な `Inventories.item_has_lots?/1`・`item_has_stock?/1`・`warehouse_has_stock?/1` を置く。`inventory_lots` の migration とスキーマは単位 A で先に作成した(在庫 0 のロットは引当済数も 0 のため、「`allocated` オーダー明細に含まれない」条件は在庫 0 の検査で満たされる)
+- [x] フィクスチャ(`maker_fixture`・`warehouse_fixture`・`item_fixture`)
+- [x] 画面: `/masters/makers|warehouses|items`(全ロール参照、アーカイブ・復帰の `handle_event`)、`/management/.../new|edit`(admin のフォーム)
+- [x] `router.ex`(全ロール `live_session`、admin 側の追加)
+- [x] テスト(Context・LiveView のロール別)、品質ゲート、コミット・プッシュ
 
 ## 2. 単位 B: 入荷・在庫一覧・受払履歴(F-V2・F-V6)
 
-- [ ] migration: `inventory_lots`(CHECK)、`inventory_transactions`(CHECK・索引)。追記専用トリガーは `shipment_order_events` と同時に作る
-- [ ] `InventoryLot`・`InventoryTransaction` スキーマ
+- [x] migration `inventory_lots`(CHECK)は単位 A で作成済み
+- [ ] migration: `inventory_transactions`(CHECK・索引)。追記専用トリガーは `shipment_order_events` と同時に作る
+- [ ] `InventoryTransaction` スキーマ(`InventoryLot` は単位 A で作成済み)
 - [ ] `Inventories`: `receive_inventory/2`(`FOR SHARE`、期限日の確定、`ON CONFLICT` 加算、`receive` 記録)、`list_inventory_lots/1`・`list_inventory_summaries/1`・`get_inventory_lot!/1`・`list_inventory_transactions/1`、共用部品 `lock_items`・`lock_lots`・`record_transaction`
 - [ ] `Items`・`Warehouses` のアーカイブ規則に実ロットを接続する
 - [ ] フィクスチャ(`lot_fixture`)

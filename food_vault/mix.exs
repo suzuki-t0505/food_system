@@ -46,6 +46,7 @@ defmodule FoodVault.MixProject do
       {:postgrex, ">= 0.0.0"},
       {:ecto_ulid_next, "~> 1.0"},
       {:bcrypt_elixir, "~> 3.0"},
+      {:scrivener_ecto, "~> 3.1"},
       {:phoenix_html, "~> 4.1"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
       {:phoenix_live_view, "~> 1.2.0"},
