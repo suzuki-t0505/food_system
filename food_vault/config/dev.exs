@@ -75,3 +75,6 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# 未定義のログカテゴリは例外にする (本番は false)
+config :food_vault, FoodVault.Utils.Logger, raise_on_unknown_category: true

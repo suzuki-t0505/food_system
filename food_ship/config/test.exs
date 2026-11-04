@@ -39,3 +39,6 @@ config :phoenix_live_view,
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# 未定義のログカテゴリは例外にする (本番は false)
+config :food_ship, FoodShip.Utils.Logger, raise_on_unknown_category: true

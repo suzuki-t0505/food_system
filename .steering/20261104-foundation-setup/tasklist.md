@@ -4,45 +4,45 @@
 
 ## 1. ULID 依存の確認(失敗したら中断して報告)
 
-- [ ] `mix hex.info ecto_ulid_next` で最新版と Elixir / Ecto 要件を確認する
-- [ ] 両アプリの `mix.exs` に `ecto_ulid_next` を追加し、`mix deps.get`
-- [ ] `mix compile --warnings-as-errors` が通る(`Ecto.ULID` が使える)
-- [ ] 通らない場合: 作業を止め、エラーの要点を報告して判断を仰ぐ
+- [x] `mix hex.info ecto_ulid_next` で最新版と Elixir / Ecto 要件を確認する
+- [x] 両アプリの `mix.exs` に `ecto_ulid_next` を追加し、`mix deps.get`
+- [x] `mix compile --warnings-as-errors` が通る(`Ecto.ULID` が使える)
+- [x] 通らない場合: 作業を止め、エラーの要点を報告して判断を仰ぐ(該当なし。`ecto_ulid_next` 1.0.2 は Elixir 1.20 で警告なくコンパイルできた)
 
 ## 2. Schema と ULID テスト
 
-- [ ] `lib/{app}/schema.ex` を作る(`Ecto.ULID` の主キー・外部キー)
-- [ ] `test/{app}/schema_test.exs`: `CREATE TEMP TABLE` の親子 2 表で保存・取得・FK、ID 26 文字、`dump` 16 バイト、不正値の `cast` が `:error`
-- [ ] テストが通る
+- [x] `lib/{app}/schema.ex` を作る(`Ecto.ULID` の主キー・外部キー)
+- [x] `test/{app}/schema_test.exs`: `CREATE TEMP TABLE` の親子 2 表で保存・取得・FK、ID 26 文字、`dump` 16 バイト、不正値の `cast` が `:error`
+- [x] テストが通る
 
 ## 3. Logger
 
-- [ ] `lib/{app}/utils/logger.ex`: `@categories`、`use`、`info` / `warning` / `error` マクロ、`category_name!/1`、`normalize/1`
-- [ ] `config/{dev,test,prod}.exs`: `raise_on_unknown_category`(dev・test は `true`、prod は `false`)
-- [ ] `test/{app}/utils/logger_test.exs`: 定義済みカテゴリの出力、未定義カテゴリで `ArgumentError`、`normalize/1` のマスク(`password` / `token`、`redact: true`、`__meta__`、未ロードのアソシエーション)
-- [ ] テストが通る
+- [x] `lib/{app}/utils/logger.ex`: `@categories`、`use`、`info` / `warning` / `error` マクロ、`category_name!/1`、`normalize/1`
+- [x] `config/{dev,test,prod}.exs`: `raise_on_unknown_category`(dev・test は `true`、prod は `false`)
+- [x] `test/{app}/utils/logger_test.exs`: 定義済みカテゴリの出力、未定義カテゴリで `ArgumentError`、`normalize/1` のマスク(`password` / `token`、`redact: true`、`__meta__`、未ロードのアソシエーション)
+- [x] テストが通る
 
 ## 4. JSON ログと `remote_ip`
 
-- [ ] `lib/{app}/utils/logger/json_formatter.ex`: `format/2` と `check_config/1`
-- [ ] `config/prod.exs`: `:default_handler` に JSON フォーマッタとメタデータ(`request_id` / `remote_ip` / `mfa` / `file` / `line`)を設定
-- [ ] `lib/{app}_web/plugs/logger_metadata.ex` を作り、`endpoint.ex` の `Plug.RequestId` の直後に追加
-- [ ] `test/{app}/utils/logger/json_formatter_test.exs`(1 行の JSON、各メタデータ、PID などで落ちない)
-- [ ] `test/{app}_web/plugs/logger_metadata_test.exs`
-- [ ] `MIX_ENV=prod` 設定でフォーマッタの出力を手動確認する(`config/prod.exs` の設定値も確認)
-- [ ] テストが通る
+- [x] `lib/{app}/utils/logger/json_formatter.ex`: `format/2` と `check_config/1`
+- [x] `config/prod.exs`: `:default_handler` に JSON フォーマッタとメタデータ(`request_id` / `remote_ip` / `mfa` / `file` / `line`)を設定
+- [x] `lib/{app}_web/plugs/logger_metadata.ex` を作り、`endpoint.ex` の `Plug.RequestId` の直後に追加
+- [x] `test/{app}/utils/logger/json_formatter_test.exs`(1 行の JSON、各メタデータ、PID などで落ちない)
+- [x] `test/{app}_web/plugs/logger_metadata_test.exs`
+- [x] `MIX_ENV=prod` 設定でフォーマッタの出力を手動確認する(`config/prod.exs` の設定値も確認。`prod.exs` を読み込み、実際に JSON が出ることを確認済み)
+- [x] テストが通る
 
 ## 5. OperationLog
 
-- [ ] `lib/{app}/utils/operation_log.ex`: `info/4`(`:create` / `:update` / `:delete` のみ)、操作者・ページの取り出し
-- [ ] `test/{app}/utils/operation_log_test.exs`(socket / conn、認証前、不正カテゴリ)
-- [ ] テストが通る
+- [x] `lib/{app}/utils/operation_log.ex`: `info/4`(`:create` / `:update` / `:delete` のみ)、操作者・ページの取り出し
+- [x] `test/{app}/utils/operation_log_test.exs`(socket / conn、認証前、不正カテゴリ)
+- [x] テストが通る
 
 ## 6. Permission
 
-- [ ] `lib/{app}/utils/permission.ex`: `role_at_least?/2`、`can?/2`、`@required_roles`(`food_vault` は `emergency_ship_order: :admin`、`food_ship` は空)
-- [ ] `test/{app}/utils/permission_test.exs`(包含関係、未定義 action、`nil`)
-- [ ] テストが通る
+- [x] `lib/{app}/utils/permission.ex`: `role_at_least?/2`、`can?/2`、`@required_roles`(`food_vault` は `emergency_ship_order: :admin`、`food_ship` は空)
+- [x] `test/{app}/utils/permission_test.exs`(包含関係、未定義 action、`nil`)
+- [x] テストが通る
 
 ## 7. 品質ゲート
 
