@@ -41,8 +41,11 @@ defmodule FoodVaultWeb do
       use Phoenix.Controller, formats: [:html, :json]
 
       use Gettext, backend: FoodVaultWeb.Gettext
+      use FoodVault.Utils.Logger
 
       import Plug.Conn
+
+      alias FoodVault.Utils.OperationLog
 
       unquote(verified_routes())
     end
@@ -51,6 +54,9 @@ defmodule FoodVaultWeb do
   def live_view do
     quote do
       use Phoenix.LiveView
+      use FoodVault.Utils.Logger
+
+      alias FoodVault.Utils.OperationLog
 
       unquote(html_helpers())
     end

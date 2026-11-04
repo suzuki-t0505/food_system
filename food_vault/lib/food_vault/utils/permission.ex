@@ -10,6 +10,10 @@ defmodule FoodVault.Utils.Permission do
 
   # アクション => 許可する最低ロール
   @required_roles %{
+    # 自分のパスワード変更(全ロール)
+    change_own_password: :viewer,
+    # ユーザー管理(登録・ロール変更・パスワード再設定・アーカイブ)
+    manage_users: :admin,
     # 発送システム起源オーダーの画面での確定・引当解除
     emergency_ship_order: :admin
   }

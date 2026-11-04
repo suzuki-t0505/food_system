@@ -9,3 +9,7 @@
 #
 # We recommend using the bang functions (`insert!`, `update!`
 # and so on) as they will fail if something goes wrong.
+
+# 初期管理者(開発: admin@example.com / admin-password-dev。環境変数で上書き可)。
+# 有効な admin がいれば何もしない。
+FoodVault.Release.run()
