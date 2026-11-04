@@ -6,7 +6,8 @@
       "Bash(xargs ls -lh)",
       "Bash(python3 *)",
       "Bash(sed *)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(docker build:*)"
     ],
     "deny": [
       "Read(./claude_code_session_logs)",
