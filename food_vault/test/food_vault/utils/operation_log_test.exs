@@ -43,6 +43,17 @@ defmodule FoodVault.Utils.OperationLogTest do
       assert log =~ "更新"
     end
 
+    test "在庫 API: api_operator を操作者として出力する" do
+      conn =
+        conn(:post, "/api/v1/shipment_orders")
+        |> Plug.Conn.assign(:api_operator, "staff@example.com")
+
+      log = capture_log(fn -> OperationLog.info(conn, "出庫引当しました。", :create, %{id: 1}) end)
+
+      assert log =~ "staff@example.com"
+      assert log =~ "/api/v1/shipment_orders"
+    end
+
     test "認証前 (current_scope なし) でも落ちない" do
       log = capture_log(fn -> OperationLog.info(socket(), "削除しました。", :delete, %{id: 1}) end)
 

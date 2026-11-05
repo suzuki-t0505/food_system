@@ -1,21 +1,58 @@
 defmodule FoodVaultWeb.ErrorJSON do
   @moduledoc """
-  This module is invoked by your endpoint in case of errors on JSON requests.
+  Endpoint が JSON のリクエストで起きたエラーを描画するモジュール(config/config.exs)。
 
-  See config/config.exs.
+  JSON を返すのは在庫 API だけなので、API の共通エラー形式
+  (`FoodVaultWeb.Api.ErrorResponse`)で返す。ルーティング前に起きるエラー
+  (存在しないルート、壊れた JSON、`Accept` の不一致)がここに来る。
+
+  `Accept` が無い・`*/*` のリクエストでも JSON になるよう、`config/config.exs` の
+  `render_errors` は JSON を先頭(fallback)にしている。
   """
 
-  # If you want to customize a particular status code,
-  # you may add your own clauses, such as:
-  #
-  # def render("500.json", _assigns) do
-  #   %{errors: %{detail: "Internal Server Error"}}
-  # end
+  alias FoodVaultWeb.Api.ErrorResponse
 
-  # By default, Phoenix returns the status message from
-  # the template name. For example, "404.json" becomes
-  # "Not Found".
+  @codes %{
+    400 => "bad_request",
+    404 => "not_found",
+    406 => "not_acceptable",
+    413 => "payload_too_large",
+    415 => "unsupported_media_type",
+    422 => "unprocessable_entity",
+    500 => "internal_server_error"
+  }
+
+  @messages %{
+    400 => "リクエストが正しくありません。",
+    404 => "見つかりません。",
+    406 => "JSON 以外の形式には対応していません。",
+    413 => "リクエストが大きすぎます。",
+    415 => "対応していない Content-Type です。",
+    422 => "リクエストを処理できません。",
+    500 => "サーバーでエラーが発生しました。"
+  }
+
   def render(template, _assigns) do
-    %{errors: %{detail: Phoenix.Controller.status_message_from_template(template)}}
+    status = status(template)
+
+    ErrorResponse.body(
+      Map.get(@codes, status) || code(template),
+      Map.get(@messages, status) || Phoenix.Controller.status_message_from_template(template)
+    )
+  end
+
+  defp status(template) do
+    case Integer.parse(template) do
+      {status, ".json"} -> status
+      _ -> nil
+    end
+  end
+
+  # 上の表に無い状態は、状態名("Bad Gateway")をスネークケースにする
+  defp code(template) do
+    template
+    |> Phoenix.Controller.status_message_from_template()
+    |> String.downcase()
+    |> String.replace(~r/[^a-z0-9]+/, "_")
   end
 end

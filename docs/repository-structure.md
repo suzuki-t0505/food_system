@@ -126,16 +126,18 @@ lib/
     │   ├── layouts.ex  /  layouts/root.html.heex   # ［現状］
     │   └── inventory_components.ex     # ページ送り・アーカイブ表示・数量 3 列表記 ［現状：段階 2］
     ├── controllers/
-    │   ├── error_html.ex / error_json.ex / page_*.ex   # ［現状］
-    │   └── api/
-    │       ├── fallback_controller.ex          # 共通エラー形式
-    │       └── v1/
-    │           ├── shipment_order_controller.ex  / shipment_order_json.ex
-    │           ├── warehouse_controller.ex       / warehouse_json.ex
-    │           └── item_controller.ex            / item_json.ex
+    │   └── error_html.ex / error_json.ex / page_*.ex   # error_json.ex は在庫 API の共通エラー形式 ［現状］
+    ├── api/                            # 在庫 API（JSON。LiveView 対象外）［現状：段階 3］
+    │   ├── error_response.ex           # 共通エラー形式の本文（plug・FallbackController・ErrorJSON が使う）
+    │   ├── operator.ex                 # operator / reason の検証
+    │   ├── fallback_controller.ex      # Context の戻り値 → 共通エラー形式
+    │   └── v1/
+    │       ├── shipment_order_controller.ex  / shipment_order_json.ex   # ①②③⑤
+    │       ├── warehouse_controller.ex       / warehouse_json.ex        # ⑥
+    │       └── item_controller.ex            / item_json.ex             # ⑦
     ├── plugs/
     │   ├── logger_metadata.ex          # Logger メタデータに remote_ip を設定
-    │   └── service_token_auth.ex       # サービストークン認証（定数時間比較）［計画］
+    │   └── service_token_auth.ex       # サービストークン認証（定数時間比較）［現状：段階 3］
     └── live/
         ├── user_session_live/          # ログイン・パスワード変更（login.ex / password.ex）［現状］
         ├── inventory_lot_live/         # 在庫一覧・ロット詳細（index.ex / show.ex）［現状：段階 2］

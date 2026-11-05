@@ -37,13 +37,30 @@ defmodule FoodVault.Items do
   end
 
   @doc "有効な商品すべて(選択肢用、コード順、メーカーを preload)。"
-  def all_items do
+  def all_items, do: Repo.all(active_items_query())
+
+  defp active_items_query do
     Item
     |> where([i], is_nil(i.archived_at))
     |> order_by([i], asc: i.item_code)
     |> preload(:maker)
-    |> Repo.all()
   end
+
+  @doc """
+  有効な商品を商品コードで検索する(在庫 API ⑦ 用。コード順、メーカーを preload)。
+
+  `item_code` が `nil`・空(空白のみ)なら有効な商品すべて。指定時は**完全一致**。
+  """
+  def search_active_items(item_code \\ nil)
+
+  def search_active_items(item_code) when is_binary(item_code) do
+    case String.trim(item_code) do
+      "" -> all_items()
+      code -> active_items_query() |> where([i], i.item_code == ^code) |> Repo.all()
+    end
+  end
+
+  def search_active_items(_item_code), do: all_items()
 
   @doc "商品を取得する(メーカーを preload)。"
   def get_item!(id), do: Item |> preload(:maker) |> Repo.get!(id)

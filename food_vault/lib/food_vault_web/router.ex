@@ -13,14 +13,24 @@ defmodule FoodVaultWeb.Router do
     plug :fetch_current_scope_for_user
   end
 
+  # 在庫 API(発送システム用)。ブラウザ用のセッション・CSRF は通さず、サービストークンで認証する
   pipeline :api do
     plug :accepts, ["json"]
+    plug FoodVaultWeb.Plugs.ServiceTokenAuth
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", FoodVaultWeb do
-  #   pipe_through :api
-  # end
+  ## 在庫 API(発送システム用。サービストークン認証)
+
+  scope "/api/v1", FoodVaultWeb.Api.V1 do
+    pipe_through :api
+
+    # index は ?external_slip_id= の照会専用
+    resources "/shipment_orders", ShipmentOrderController, only: [:create, :show, :index]
+    post "/shipment_orders/:id/ship", ShipmentOrderController, :ship
+    post "/shipment_orders/:id/cancel", ShipmentOrderController, :cancel
+    get "/warehouses", WarehouseController, :index
+    get "/items", ItemController, :index
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:food_vault, :dev_routes) do

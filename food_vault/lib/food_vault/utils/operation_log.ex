@@ -32,6 +32,9 @@ defmodule FoodVault.Utils.OperationLog do
 
   # current_scope は認証の実装 (段階 1) で入る。ある場合だけ操作者の ID を取り出す
   defp operator(%{assigns: %{current_scope: %{user: %{id: id}}}}), do: id
+
+  # 在庫 API はユーザーでなく、リクエストの operator(発送システムの操作者)を記録する
+  defp operator(%{assigns: %{api_operator: operator}}) when is_binary(operator), do: operator
   defp operator(_target), do: nil
 
   defp page(%Phoenix.LiveView.Socket{view: view, assigns: assigns}) do

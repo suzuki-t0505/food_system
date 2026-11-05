@@ -167,6 +167,25 @@ defmodule FoodVault.ItemsTest do
     end
   end
 
+  describe "search_active_items/1" do
+    test "商品コードの完全一致、空・nil は有効な商品すべて、アーカイブ済みは除く" do
+      item = item_fixture(%{item_code: "SEARCH-1"})
+      other = item_fixture(%{item_code: "SEARCH-2"})
+      archived = item_fixture(%{item_code: "SEARCH-3"})
+      {:ok, _} = Items.archive_item(user_scope_fixture(), archived)
+
+      assert [%{id: id, maker: %{}}] = Items.search_active_items("SEARCH-1")
+      assert id == item.id
+      assert Items.search_active_items(" SEARCH-1 ") |> Enum.map(& &1.id) == [item.id]
+      assert Items.search_active_items("SEARCH") == []
+      assert Items.search_active_items("SEARCH-3") == []
+
+      for blank <- [nil, "", "  "] do
+        assert Enum.map(Items.search_active_items(blank), & &1.id) == [item.id, other.id]
+      end
+    end
+  end
+
   describe "list_items/1" do
     test "メーカーを preload し、アーカイブ済みは既定で含めない" do
       item = item_fixture()

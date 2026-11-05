@@ -28,8 +28,10 @@ config :food_vault,
 config :food_vault, FoodVaultWeb.Endpoint,
   url: [host: "localhost"],
   adapter: Bandit.PhoenixAdapter,
+  # Accept が無い・*/* のクライアント(在庫 API の発送システムなど)には JSON を返す。
+  # ブラウザは Accept: text/html を送るので HTML のまま。順序を変えないこと(先頭が fallback)
   render_errors: [
-    formats: [html: FoodVaultWeb.ErrorHTML, json: FoodVaultWeb.ErrorJSON],
+    formats: [json: FoodVaultWeb.ErrorJSON, html: FoodVaultWeb.ErrorHTML],
     layout: false
   ],
   pubsub_server: FoodVault.PubSub,
