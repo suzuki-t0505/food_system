@@ -20,6 +20,7 @@ food_system/
 ├── mock/                      # HTML モック（create-mock スキルの出力）［計画］
 ├── food_vault/                # 在庫管理システム（Phoenix アプリ）［現状：雛形］
 ├── food_ship/                 # 発送システム（Phoenix アプリ）［現状：雛形］
+├── infra/terraform/           # GCP 基盤の Terraform（§1.2）［現状］
 ├── .claude/                   # Claude Code の設定・エージェント・スキル［現状］
 └── .agents/skills/            # security-audit スキル［現状］
 ```
@@ -32,6 +33,24 @@ food_system/
 | 共有コードは作らない | 共通化したくなっても、共有ライブラリ（umbrella・path 依存）は作らない。`{App}.Schema`・`Permission`・`Logger`・認証などの同形のモジュールは **各アプリにそれぞれ置く**（コピーを許容し、変更は両方に反映する） |
 | ルートに置くもの | プロジェクト全体で共有するもの（`docker-compose.yml`・`Makefile`・`Dockerfile.dev`・`docs/`・`CLAUDE.md`）だけ。アプリ固有の設定は各アプリ配下に置く |
 | コマンドはコンテナ経由 | ホストで直接 `mix` を叩かない（`docker compose run --rm food_vault_web mix ...`）。`Makefile` に集約する |
+
+### 1.2 GCP 基盤 `infra/terraform/`
+
+```
+infra/terraform/
+├── README.md                  # 初回構築・デプロイ・検証の手順
+├── versions.tf                # Terraform / プロバイダのバージョン、backend "gcs"（部分設定）
+├── .terraform.lock.hcl        # プロバイダのロック（コミットする）
+├── variables.tf / outputs.tf
+├── backend.hcl.example / terraform.tfvars.example   # 実値の backend.hcl / terraform.tfvars はコミットしない
+├── apis.tf / registry.tf / network.tf / sql.tf / secrets.tf   # 共有基盤（API・Artifact Registry・VPC・Cloud SQL・共有の秘密）
+├── apps.tf                    # module "food_vault" / "food_ship" の呼び出し
+├── lb.tf / armor.tf           # 外部アプリケーション LB・Cloud Armor
+├── modules/app/               # 1 アプリ分（DB・DB ユーザー・秘密・SA・Cloud Run サービス・Cloud Run Job）
+└── tests/plan.tftest.hcl      # terraform test（モックプロバイダで plan を評価）
+```
+
+- 2 アプリで同じ形のリソースは `modules/app` に置き、差分（環境変数・秘密・egress）は引数で渡す。ファイルは役割ごとに分ける
 
 ---
 
@@ -77,6 +96,8 @@ food_vault/
 ├── AGENTS.md                  # Phoenix 1.8 / LiveView 等の AI 向けガイド（current_scope の扱いを含む）［現状］
 ├── README.md                  # ［現状］
 ├── mix.exs / mix.lock         # 依存・エイリアス（setup / test / precommit など）［現状］
+├── Dockerfile / .dockerignore # 本番イメージ（`mix phx.gen.release --docker` で生成）［計画］
+├── rel/overlays/bin/          # リリースの起動スクリプト server / migrate（`mix phx.gen.release` で生成）［現状］
 ├── assets/                    # JS / CSS / vendor（Tailwind・daisyUI・heroicons）［現状］
 ├── config/                    # config / dev / prod / runtime / test ［現状］
 ├── lib/                       # アプリ本体（§3.2）
@@ -97,7 +118,7 @@ lib/
 │   │   ├── user.ex
 │   │   ├── user_token.ex
 │   │   └── scope.ex                    # current_scope（user を持つ）
-│   ├── release.ex                      # リリースタスク（初期管理者の作成）
+│   ├── release.ex                      # リリースタスク（migrate / rollback / migrate_and_seed / 初期管理者の作成）
 │   ├── makers.ex  /  makers/maker.ex                    # ［現状：段階 2 で実装済み］
 │   ├── warehouses.ex  /  warehouses/warehouse.ex        # ［現状：段階 2］
 │   ├── items.ex  /  items/item.ex                       # ［現状：段階 2］
@@ -206,7 +227,7 @@ lib/
 │   ├── application.ex / repo.ex / mailer.ex   # ［現状］
 │   ├── schema.ex                       # {App}.Schema マクロ（ULID 主キー）
 │   ├── accounts.ex  /  accounts/{user,user_token,scope}.ex
-│   ├── release.ex                      # リリースタスク（初期管理者の作成）
+│   ├── release.ex                      # リリースタスク（migrate / rollback / migrate_and_seed / 初期管理者の作成）
 │   ├── clients.ex  /  clients/client.ex
 │   ├── shipping_items.ex  /  shipping_items/shipping_item.ex
 │   ├── expiration_rules.ex  /  expiration_rules/expiration_rule.ex

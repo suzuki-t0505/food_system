@@ -55,6 +55,7 @@ infra/terraform/
 ├── network.tf                 # VPC・サブネット・プライベートサービス接続
 ├── sql.tf                     # Cloud SQL インスタンス
 ├── secrets.tf                 # 両アプリ共通の秘密(在庫 API トークン)
+├── tests/plan.tftest.hcl     # terraform test(モックプロバイダ)
 ├── apps.tf                    # module "food_vault" / module "food_ship" の呼び出し
 ├── lb.tf                      # IP・証明書・NEG・バックエンド・URL マップ・プロキシ・転送ルール
 ├── armor.tf                   # Cloud Armor ポリシー
@@ -74,7 +75,7 @@ infra/terraform/
 | `project_id` | — | GCP プロジェクト |
 | `region` | `asia-northeast1` | |
 | `domain` | — | 独自ドメイン。ホスト名は `vault.<domain>` / `ship.<domain>` |
-| `food_vault_image` / `food_ship_image` | — | イメージ(`<region>-docker.pkg.dev/<project>/food-system/food_vault:<tag>`) |
+| `food_vault_image_tag` / `food_ship_image_tag` | — | イメージのタグ(イメージは `<region>-docker.pkg.dev/<project>/food-system/<app>:<tag>`) |
 | `initial_admin_email` | — | 初期管理者のメール(両アプリ共通) |
 | `db_tier` | `db-custom-1-3840` | Cloud SQL のマシン |
 | `deletion_protection` | `true` | Cloud SQL の削除保護 |
@@ -106,7 +107,7 @@ infra/terraform/
 ### 4.3 サービスアカウント(アプリごと)
 
 - `food-vault-run@` / `food-ship-run@`: サービスと Job で共用。付与するのは自アプリの秘密への `secretmanager.secretAccessor` と `cloudsql.client`(プライベート IP 接続では必須ではないが付与しておく)のみ
-- 発送 → 在庫は ingress で内部に限っており、Cloud Run の IAM 認証は使わない(`allUsers` に `run.invoker` を付与。外部からの到達は ingress で遮断済み)
+- 発送 → 在庫は ingress で内部に限っており、Cloud Run の IAM 認証は使わない(`invoker_iam_disabled = true`。外部からの到達は ingress で遮断済み。`allUsers` への付与は組織ポリシーで拒否されることがあるため使わない)
 
 ### 4.4 Cloud Run サービス(`modules/app`)
 
@@ -135,7 +136,7 @@ infra/terraform/
 
 - `google_compute_global_address`、`google_compute_managed_ssl_certificate`(`vault.<domain>`・`ship.<domain>`)
 - アプリごとに `google_compute_region_network_endpoint_group`(`SERVERLESS`)＋ `google_compute_backend_service`(`EXTERNAL_MANAGED`、`security_policy` 付与、ログ有効)
-- URL マップ: ホストルールで振り分け。既定(どのホストにも一致しない)は 404 を返す
+- URL マップ: ホストルールで振り分け。既定(どのホストにも一致しない。IP 直打ちなど)は在庫のホストへ 301 リダイレクト(URL マップは既定の転送先が必須のため)
 - HTTPS プロキシ＋転送ルール(443)、HTTP は別 URL マップで HTTPS へ 301 リダイレクト(80)
 - 証明書の発行には DNS の A レコード(出力の IP)登録が必要(利用者が設定)
 
@@ -143,13 +144,14 @@ infra/terraform/
 
 | 優先度 | 条件 | 動作 |
 | :-- | :-- | :-- |
-| 100 | `request.path.startsWith('/api/')` | deny(403)。在庫 API を外部から遮断(発送には `/api` が無いので共通で問題ない) |
-| 200 | `allowed_source_ranges` 以外(変数指定時のみ作成) | deny(403) |
+| 100 | `urlDecode(request.path).lower().matches('^/+api(/|$)')` | deny(403)。在庫 API を外部から遮断(発送には `/api` が無いので共通で問題ない)。Plug は空のパス要素を無視し、要素を URL デコードするため `//api`・`%61pi` も対象にする |
 | 1000 | `sqli-v33-stable`(感度 1) | deny(403) |
 | 1001 | `xss-v33-stable`(感度 1) | deny(403) |
 | 1002〜 | `lfi` / `rfi` / `rce` / `scannerdetection` / `protocolattack` の `v33-stable`(感度 1) | deny(403) |
-| 2000 | 全体 | throttle(IP 単位、`rate_limit_per_minute`/分、超過 429) |
-| 2147483647 | 既定 | allow |
+| 2000 | `allowed_source_ranges`(未指定なら `*`) | throttle(IP 単位、`rate_limit_per_minute`/分、超過 429。上限内は allow) |
+| 2147483647 | 既定 | `allowed_source_ranges` 指定時は deny(403)、未指定なら allow |
+
+- throttle は上限内なら allow で評価を終えるため、送信元の制限は「throttle の対象を許可 CIDR に絞り、既定を deny にする」形で実現する(1 ルールの CIDR は 10 件まで。変数で検証)
 
 - 誤検知(LiveView の送信内容など)が出たら、ルールの `opt_out_rule_ids` で個別に外す。初回は `preview` にしない
 
@@ -201,7 +203,7 @@ end
 
 ## 7. 検証
 
-- `terraform fmt -check`・`terraform validate`(環境に Terraform を入れて実施)
+- `terraform fmt -check`・`terraform validate`・`terraform test`(`tests/plan.tftest.hcl`。プロバイダをモックして plan を評価)
 - 両アプリで `mix compile --warnings-as-errors`・`mix format`・`mix credo`・`mix test`(Release の変更のため)
 - 可能なら本番イメージの `docker build` が通ること
 - 実 GCP への `apply` はこのセッションでは行わない(利用者が実施)
