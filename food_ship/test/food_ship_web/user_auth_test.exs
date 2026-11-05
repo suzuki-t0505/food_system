@@ -177,6 +177,49 @@ defmodule FoodShipWeb.UserAuthTest do
     end
   end
 
+  describe "require_authenticated_staff_user/2" do
+    for {role, allowed?} <- [admin: true, staff: true, viewer: false] do
+      test "#{role}: #{if allowed?, do: "通す", else: "拒否して / へ"}", %{conn: conn} do
+        user = user_fixture(%{role: unquote(role), must_change_password: false})
+
+        conn =
+          conn
+          |> fetch_flash()
+          |> assign(:current_scope, Scope.for_user(user))
+          |> UserAuth.require_authenticated_staff_user([])
+
+        if unquote(allowed?) do
+          refute conn.halted
+        else
+          assert conn.halted
+          assert redirected_to(conn) == ~p"/"
+          assert Phoenix.Flash.get(conn.assigns.flash, :error) == "権限がありません。"
+        end
+      end
+    end
+
+    test "未ログインはログイン画面へ", %{conn: conn} do
+      conn =
+        conn
+        |> fetch_flash()
+        |> assign(:current_scope, nil)
+        |> UserAuth.require_authenticated_staff_user([])
+
+      assert redirected_to(conn) == ~p"/users/log_in"
+    end
+
+    test "staff でも must_change_password が true なら /users/password へ", %{conn: conn} do
+      user = user_fixture(%{role: :staff})
+
+      conn =
+        conn
+        |> assign(:current_scope, Scope.for_user(user))
+        |> UserAuth.require_authenticated_staff_user([])
+
+      assert redirected_to(conn) == ~p"/users/password"
+    end
+  end
+
   describe "require_authenticated_admin_user/2" do
     for {role, allowed?} <- [admin: true, staff: false, viewer: false] do
       test "#{role}: #{if allowed?, do: "通す", else: "拒否して / へ"}", %{conn: conn} do

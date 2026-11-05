@@ -31,6 +31,8 @@ defmodule FoodShipWeb.Layouts do
     default: nil,
     doc: "the current [scope](https://phoenix.hexdocs.pm/scopes.html)"
 
+  attr :wide, :boolean, default: false, doc: "一覧など、横幅の広い画面で true"
+
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -66,8 +68,28 @@ defmodule FoodShipWeb.Layouts do
       </div>
     </header>
 
+    <nav
+      :if={@current_scope && @current_scope.user}
+      class="flex flex-wrap gap-1 px-4 sm:px-6 lg:px-8"
+      id="main-nav"
+    >
+      <.link navigate={~p"/shipping_slips"} class="btn btn-sm btn-ghost">作業画面</.link>
+      <.link
+        :if={FoodShip.Utils.Permission.can?(@current_scope.user, :manage_shipping_slips)}
+        navigate={~p"/shipping_slips/new"}
+        class="btn btn-sm btn-ghost"
+      >
+        伝票登録
+      </.link>
+      <.link navigate={~p"/masters/clients"} class="btn btn-sm btn-ghost">発注元</.link>
+      <.link navigate={~p"/masters/shipping_items"} class="btn btn-sm btn-ghost">発送商品</.link>
+      <.link navigate={~p"/masters/expiration_rules"} class="btn btn-sm btn-ghost">
+        出荷期限ルール
+      </.link>
+    </nav>
+
     <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
+      <div class={["mx-auto space-y-4", (@wide && "max-w-6xl") || "max-w-2xl"]}>
         {render_slot(@inner_block)}
       </div>
     </main>

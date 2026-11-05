@@ -9,9 +9,9 @@ defmodule FoodShipWeb.PageControllerTest do
   describe "ログイン済み" do
     setup :register_and_log_in_user
 
-    test "GET / は 200 でユーザー名を表示する", %{conn: conn, user: user} do
+    test "GET / は作業画面へ遷移する", %{conn: conn} do
       conn = get(conn, ~p"/")
-      assert html_response(conn, 200) =~ user.name
+      assert redirected_to(conn) == ~p"/shipping_slips"
     end
   end
 end

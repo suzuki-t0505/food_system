@@ -54,6 +54,22 @@ defmodule FoodShipWeb.ConnCase do
     %{conn: log_in_user(conn, user), user: user, scope: scope}
   end
 
+  @doc """
+  `Task` ＋ `handle_info` の結果を待つ。`fun` が失敗(`ExUnit.AssertionError`)しなくなるまで、
+  `timeout` ミリ秒まで 10 ミリ秒間隔で再実行する。
+  """
+  def wait_until(fun, timeout \\ 2000) do
+    fun.()
+  rescue
+    error in ExUnit.AssertionError ->
+      if timeout <= 0 do
+        reraise error, __STACKTRACE__
+      else
+        Process.sleep(10)
+        wait_until(fun, timeout - 10)
+      end
+  end
+
   @doc "`user` のセッションを作った `conn` を返す。"
   def log_in_user(conn, user) do
     token = FoodShip.Accounts.generate_user_session_token(user)

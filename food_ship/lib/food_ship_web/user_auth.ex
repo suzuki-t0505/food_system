@@ -290,15 +290,20 @@ defmodule FoodShipWeb.UserAuth do
     end
   end
 
+  @doc "`staff` 以上を要求する plug。ログイン済みの確認と強制遷移も含む。"
+  def require_authenticated_staff_user(conn, opts), do: require_role(conn, opts, :staff)
+
   @doc "`admin` を要求する plug。ログイン済みの確認と強制遷移も含む。"
-  def require_authenticated_admin_user(conn, opts) do
+  def require_authenticated_admin_user(conn, opts), do: require_role(conn, opts, :admin)
+
+  defp require_role(conn, opts, role) do
     conn = require_authenticated_user(conn, opts)
 
     cond do
       conn.halted ->
         conn
 
-      Permission.role_at_least?(conn.assigns.current_scope.user, :admin) ->
+      Permission.role_at_least?(conn.assigns.current_scope.user, role) ->
         conn
 
       true ->
