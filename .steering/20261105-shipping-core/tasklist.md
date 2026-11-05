@@ -36,16 +36,22 @@
 
 ## 3. 単位 C: 伝票登録・引当・再引当(F-S2)
 
-- [ ] migration(`shipping_slips`・`slip_allocated_lots`・`slip_no` のシーケンス・部分ユニーク・CHECK・索引)
-- [ ] `ShippingSlip`・`SlipAllocatedLot` スキーマ(changeset を用途別に。ラベル・`slip_no_label/1`)とテスト
-- [ ] `ShippingSlips.AllocationResult`(純粋関数)とテスト
-- [ ] `ShippingSlips`: `preview/4`・`change_shipping_slip/2`・`create_shipping_slip/2`・`allocate_shipping_slip/2`・`update_shipping_slip/3`(§5)
-- [ ] Context のテスト(`pending` 保存・計算値・二重登録・アーカイブ済み・倉庫未設定・`allocated` とロット保存・`shortage`・各エラーの `allocation_error`・合計不一致・再引当での照会と解除・在庫側 `shipped` の突合・解除失敗で `pending`・`stale`・数量変更で `pending` に戻る・最低許容期限日の再計算)
-- [ ] 並行性テスト(同じ伝票の再引当を同時実行。`ConcurrencyCase` を発送側に追加)
-- [ ] 伝票フィクスチャ
-- [ ] `ShippingSlipLive.Form`(`:new`・`:edit`。リアルタイム計算・箱数の手修正・保存 → `Task` で引当・結果の表示と遷移・確認ダイアログ・倉庫未設定の警告)とテスト(表示と DB の両方、`Req.Test` 共有モード)
-- [ ] `router.ex`(staff 以上)
-- [ ] 品質ゲート、コミット・プッシュ
+- [x] migration(`shipping_slips`・`slip_allocated_lots`・`slip_no` のシーケンス・部分ユニーク・CHECK・索引)
+- [x] `ShippingSlip`・`SlipAllocatedLot` スキーマ(changeset を用途別に。ラベル・`slip_no_label/1`)とテスト
+- [x] `ShippingSlips.AllocationResult`(純粋関数)とテスト
+- [x] `ShippingSlips`: `preview/4`・`change_shipping_slip/2`・`create_shipping_slip/2`・`allocate_shipping_slip/2`・`update_shipping_slip/3`(§5)
+- [x] Context のテスト(`pending` 保存・計算値・二重登録・アーカイブ済み・倉庫未設定・`allocated` とロット保存・`shortage`・各エラーの `allocation_error`・合計不一致・再引当での照会と解除・在庫側 `shipped` の突合・解除失敗で `pending`・`stale`・数量変更で `pending` に戻る・最低許容期限日の再計算)
+- [x] 並行性テスト(同じ伝票の再引当を同時実行。`ConcurrencyCase` を発送側に追加)
+- [x] 伝票フィクスチャ
+- [x] `ShippingSlipLive.Form`(`:new`・`:edit`。リアルタイム計算・箱数の手修正・保存 → `Task` で引当・結果の表示と遷移・確認ダイアログ・倉庫未設定の警告)とテスト(表示と DB の両方、`Req.Test` 共有モード)
+- [x] `router.ex`(staff 以上)
+- [x] 品質ゲート、コミット・プッシュ
+- 実装メモ(design.md からの差分):
+  - `allocation_attempted_at` は同時操作を見分けるため `utc_datetime_usec`(マイクロ秒)にした
+  - `allocate_shipping_slip/2` の戻り値は常に `{:ok, slip, info}`(`info` は `errors`・`reconciled`)または `{:error, ...}`
+  - `ShippingSlips.warehouse_configured?/0`・`list_shipping_slips/2` を追加。作業画面(`ShippingSlipLive.Index`)は単位 C では一覧のみの暫定版(単位 D で作り込む)
+  - 残る競合: 同じ伝票を同時に操作された場合、後から確保した側だけが結果を反映する(`:stale`)が、在庫側への呼び出しは両方が行う。在庫側が冪等なので整合は保たれる(片方の解除が他方の引当後に届く稀なケースは、梱包完了時の 409 突合で検出する)
+  - `Utils.Calc` の `ShippingSlipsFixtures`・`ConcurrencyCase`・`InventoryStub.routes/1` をテスト基盤に追加
 
 ## 4. 単位 D: 作業画面・数量変更・取消(F-S3)
 

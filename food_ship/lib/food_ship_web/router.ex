@@ -66,6 +66,18 @@ defmodule FoodShipWeb.Router do
     post "/users/update_password", UserSessionController, :update_password
   end
 
+  ## staff 以上
+
+  scope "/", FoodShipWeb do
+    pipe_through [:browser, :require_authenticated_staff_user]
+
+    live_session :require_authenticated_staff,
+      on_mount: [{FoodShipWeb.UserAuth, :ensure_authenticated_staff}] do
+      live "/shipping_slips/new", ShippingSlipLive.Form, :new
+      live "/shipping_slips/:id/edit", ShippingSlipLive.Form, :edit
+    end
+  end
+
   ## 全ロール(ログイン済み)
 
   scope "/", FoodShipWeb do
@@ -75,6 +87,8 @@ defmodule FoodShipWeb.Router do
 
     live_session :require_authenticated_user,
       on_mount: [{FoodShipWeb.UserAuth, :ensure_authenticated}] do
+      live "/shipping_slips", ShippingSlipLive.Index, :index
+
       live "/masters/clients", ClientLive.Index, :index
       live "/masters/shipping_items", ShippingItemLive.Index, :index
       live "/masters/expiration_rules", ExpirationRuleLive.Index, :index
