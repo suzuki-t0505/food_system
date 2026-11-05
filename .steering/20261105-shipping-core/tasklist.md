@@ -23,15 +23,16 @@
 
 ## 2. 単位 B: マスタ(F-S1)
 
-- [ ] migration(`clients`・`shipping_items`・`expiration_rules`、`unique_index`・FK 索引・CHECK)
-- [ ] `FoodShip.Clients`(+ `Clients.Client`)・テスト(CRUD・アーカイブ・復帰・一意制約・権限)
-- [ ] `FoodShip.ShippingItems`(+ `ShippingItem`)・テスト(CRUD・アーカイブ・`fetch_inventory_item/1`・`refresh_from_inventory/2`・在庫側にない商品コード・通信失敗)
-- [ ] `FoodShip.ExpirationRules`(+ `ExpirationRule`)・テスト(CRUD・物理削除・一意制約・アーカイブ済みを選べない)
-- [ ] 参照一覧 LiveView 3 つ(`/masters/...`、全ロール)とテスト
-- [ ] 編集フォーム LiveView 3 つ(`/management/...`、`admin`。発送商品は「商品コードで取得」を `Task` で)とテスト(権限・イベントの直接送信の拒否)
-- [ ] `router.ex` にルート、`Layouts` のナビにマスタへのリンクを追加
-- [ ] マスタ用フィクスチャ(Context の公開 API 経由)
-- [ ] 品質ゲート、コミット・プッシュ
+- [x] migration(`clients`・`shipping_items`・`expiration_rules`、`unique_index`・FK 索引・CHECK)
+- [x] `FoodShip.Clients`(+ `Clients.Client`)・テスト(CRUD・アーカイブ・復帰・一意制約・権限)
+- [x] `FoodShip.ShippingItems`(+ `ShippingItem`)・テスト(CRUD・アーカイブ・`fetch_inventory_item/1`・`refresh_from_inventory/2`・在庫側にない商品コード・通信失敗)
+- [x] `FoodShip.ExpirationRules`(+ `ExpirationRule`)・テスト(CRUD・物理削除・一意制約・アーカイブ済みを選べない)
+- [x] 参照一覧 LiveView 3 つ(`/masters/...`、全ロール)とテスト
+- [x] 編集フォーム LiveView 3 つ(`/management/...`、`admin`。発送商品は「商品コードで取得」を `Task` で)とテスト(権限・イベントの直接送信の拒否)
+- [x] `router.ex` にルート、`Layouts` のナビにマスタへのリンクを追加
+- [x] マスタ用フィクスチャ(Context の公開 API 経由)
+- [x] 品質ゲート、コミット・プッシュ
+- 実装メモ: マスタ一覧はページングしない(件数が少ない前提。在庫側のような `scrivener_ecto` は入れず `Repo.all`)。`Layouts.app` に `wide` 属性とマスタのナビを追加した。`FoodShipWeb.InventoryMessages`(在庫 API エラーの文言)と `FoodShipWeb.MasterComponents` を追加した
 
 ## 3. 単位 C: 伝票登録・引当・再引当(F-S2)
 

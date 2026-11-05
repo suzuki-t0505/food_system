@@ -72,6 +72,13 @@ defmodule FoodShipWeb.Router do
     pipe_through [:browser, :require_authenticated_user]
 
     get "/", PageController, :home
+
+    live_session :require_authenticated_user,
+      on_mount: [{FoodShipWeb.UserAuth, :ensure_authenticated}] do
+      live "/masters/clients", ClientLive.Index, :index
+      live "/masters/shipping_items", ShippingItemLive.Index, :index
+      live "/masters/expiration_rules", ExpirationRuleLive.Index, :index
+    end
   end
 
   ## admin 専用
@@ -84,6 +91,13 @@ defmodule FoodShipWeb.Router do
       live "/users", UserLive.Index, :index
       live "/users/new", UserLive.Form, :new
       live "/users/:id/reset_password", UserLive.Form, :reset_password
+
+      live "/clients/new", ClientLive.Form, :new
+      live "/clients/:id/edit", ClientLive.Form, :edit
+      live "/shipping_items/new", ShippingItemLive.Form, :new
+      live "/shipping_items/:id/edit", ShippingItemLive.Form, :edit
+      live "/expiration_rules/new", ExpirationRuleLive.Form, :new
+      live "/expiration_rules/:id/edit", ExpirationRuleLive.Form, :edit
     end
   end
 end
