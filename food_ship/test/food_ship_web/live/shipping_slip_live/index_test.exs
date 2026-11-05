@@ -25,6 +25,8 @@ defmodule FoodShipWeb.ShippingSlipLive.IndexTest do
   defp allocate_route(fun), do: {"POST", @orders, fun}
   defp list_route(fun), do: {"GET", @orders, fun}
   defp cancel_route(fun), do: {"POST", ~r{/cancel$}, fun}
+  defp ship_route(fun), do: {"POST", ~r{/ship$}, fun}
+  defp get_route(fun), do: {"GET", ~r{/shipment_orders/[^/]+$}, fun}
 
   defp order_for(slip, attrs \\ %{}) do
     Map.merge(
@@ -410,6 +412,210 @@ defmodule FoodShipWeb.ShippingSlipLive.IndexTest do
       wait_until(fn -> assert render(lv) =~ "通信に失敗しました。再引当を押してください。" end)
       assert status_of(slip) == :pending
       assert has_element?(lv, "#reallocate-#{slip.id}")
+    end
+  end
+
+  describe "梱包完了" do
+    @describetag role: :staff
+    setup :register_and_log_in_user
+
+    test "引当済みの行にだけ「梱包完了」が出る。梱包完了すると packed になり、行がグレーアウトする", %{
+      conn: conn,
+      scope: scope,
+      user: user
+    } do
+      slip = allocated_slip(scope)
+      shortage = shortage_slip(scope)
+      shipped = order_for(slip, %{status: "shipped", shipped_at: "2026-11-20T01:02:03Z"})
+      InventoryStub.routes([ship_route(fn conn -> InventoryStub.json(conn, 200, shipped) end)])
+
+      {:ok, lv, _} = live(conn, ~p"/shipping_slips?date=#{@date_param}")
+      assert has_element?(lv, "#pack-#{slip.id}")
+      refute has_element?(lv, "#pack-#{shortage.id}")
+
+      lv |> element("#pack-#{slip.id}") |> render_click()
+
+      wait_until(fn -> assert render(lv) =~ "梱包完了にしました。" end)
+
+      packed = Repo.get!(ShippingSlip, slip.id)
+      assert packed.status == :packed
+      assert packed.packed_by_user_id == user.id
+      assert packed.packed_at == ~U[2026-11-20 01:02:03Z]
+
+      assert has_element?(lv, "#{row(slip)}.opacity-50")
+      refute has_element?(lv, "#pack-#{slip.id}")
+      refute has_element?(lv, "#cancel-#{slip.id}")
+      refute has_element?(lv, "#box-form-#{slip.id}")
+      assert has_element?(lv, row(slip), "梱包完了")
+      assert has_element?(lv, "#tab-#{@date}", "(残1件)")
+
+      assert [{"POST", ship_path, %{"operator" => operator}}] = InventoryStub.calls()
+      assert ship_path == "#{@orders}/#{@order_id}/ship"
+      assert operator == user.email
+    end
+
+    test "処理中は行のボタンを無効にし、二重に押しても在庫 API は 1 回だけ", %{conn: conn, scope: scope} do
+      slip = allocated_slip(scope)
+      test_pid = self()
+
+      InventoryStub.routes([
+        ship_route(fn conn ->
+          send(test_pid, {:waiting, self()})
+
+          receive do
+            :continue -> :ok
+          end
+
+          InventoryStub.json(
+            conn,
+            200,
+            order_for(slip, %{status: "shipped", shipped_at: "2026-11-20T01:02:03Z"})
+          )
+        end)
+      ])
+
+      {:ok, lv, _} = live(conn, ~p"/shipping_slips?date=#{@date_param}")
+      lv |> element("#pack-#{slip.id}") |> render_click()
+
+      assert_receive {:waiting, api_pid}, 2000
+      assert has_element?(lv, "#pack-#{slip.id}[disabled]")
+      assert has_element?(lv, "#update-box-count-#{slip.id}[disabled]")
+
+      render_click(lv, "pack", %{"id" => slip.id})
+      send(api_pid, :continue)
+
+      wait_until(fn -> assert render(lv) =~ "梱包完了にしました。" end)
+      assert Enum.count(InventoryStub.calls(), &match?({"POST", _, _}, &1)) == 1
+    end
+
+    test "在庫システムが停止している間は失敗して引当済みのまま。復旧後にやり直せる", %{conn: conn, scope: scope} do
+      slip = allocated_slip(scope)
+      InventoryStub.routes([ship_route(&InventoryStub.timeout/1)])
+
+      {:ok, lv, _} = live(conn, ~p"/shipping_slips?date=#{@date_param}")
+      lv |> element("#pack-#{slip.id}") |> render_click()
+
+      wait_until(fn ->
+        assert render(lv) =~ "時間をおいて、もう一度梱包完了を行ってください。"
+      end)
+
+      assert status_of(slip) == :allocated
+      assert has_element?(lv, "#pack-#{slip.id}:not([disabled])")
+
+      InventoryStub.routes([
+        ship_route(fn conn ->
+          InventoryStub.json(
+            conn,
+            200,
+            order_for(slip, %{status: "shipped", shipped_at: "2026-11-20T01:02:03Z"})
+          )
+        end)
+      ])
+
+      lv |> element("#pack-#{slip.id}") |> render_click()
+      wait_until(fn -> assert render(lv) =~ "梱包完了にしました。" end)
+      assert status_of(slip) == :packed
+    end
+
+    test "409 が返り、在庫側がすでに出庫済みなら、梱包完了に更新する", %{conn: conn, scope: scope} do
+      slip = allocated_slip(scope)
+      shipped = order_for(slip, %{status: "shipped", shipped_at: "2026-11-20T05:00:00Z"})
+
+      InventoryStub.routes([
+        ship_route(fn conn -> InventoryStub.error(conn, 409, "invalid_state") end),
+        get_route(fn conn -> InventoryStub.json(conn, 200, shipped) end)
+      ])
+
+      {:ok, lv, _} = live(conn, ~p"/shipping_slips?date=#{@date_param}")
+      lv |> element("#pack-#{slip.id}") |> render_click()
+
+      wait_until(fn -> assert render(lv) =~ "梱包完了にしました。" end)
+      assert status_of(slip) == :packed
+    end
+
+    test "409 で在庫側が出庫済みでなければ、最新の状態を表示してエラーにする", %{conn: conn, scope: scope} do
+      slip = allocated_slip(scope)
+      cancelled = order_for(slip, %{status: "cancelled"})
+
+      InventoryStub.routes([
+        ship_route(fn conn -> InventoryStub.error(conn, 409, "invalid_state") end),
+        get_route(fn conn -> InventoryStub.json(conn, 200, cancelled) end)
+      ])
+
+      {:ok, lv, _} = live(conn, ~p"/shipping_slips?date=#{@date_param}")
+      lv |> element("#pack-#{slip.id}") |> render_click()
+
+      wait_until(fn -> assert render(lv) =~ "在庫システムのオーダーの状態(cancelled)では、この操作はできません。" end)
+      assert status_of(slip) == :allocated
+    end
+  end
+
+  describe "箱数の修正" do
+    @describetag role: :staff
+    setup :register_and_log_in_user
+
+    test "梱包前の伝票の箱数を修正できる(在庫 API は呼ばない)", %{conn: conn, scope: scope} do
+      slip = allocated_slip(scope)
+      InventoryStub.routes([])
+
+      {:ok, lv, _} = live(conn, ~p"/shipping_slips?date=#{@date_param}")
+
+      lv |> form("#box-form-#{slip.id}", %{box_count: "4"}) |> render_submit()
+
+      assert Repo.get!(ShippingSlip, slip.id).box_count == 4
+      assert has_element?(lv, "#box-form-#{slip.id} input[name='box_count'][value='4']")
+      assert render(lv) =~ "箱数を更新しました。"
+      assert InventoryStub.calls() == []
+    end
+
+    test "1 未満の箱数はエラーで、変わらない", %{conn: conn, scope: scope} do
+      slip = allocated_slip(scope)
+      {:ok, lv, _} = live(conn, ~p"/shipping_slips?date=#{@date_param}")
+
+      for value <- ["0", "-2"] do
+        html = lv |> form("#box-form-#{slip.id}", %{box_count: value}) |> render_submit()
+        assert html =~ "箱数は 1 以上の整数で入力してください。"
+      end
+
+      assert Repo.get!(ShippingSlip, slip.id).box_count == slip.box_count
+    end
+
+    test "梱包済みの行には入力欄がなく、イベントを直接送っても修正できない", %{conn: conn, scope: scope} do
+      slip = slip_fixture(%{scheduled_ship_date: @date}, scope)
+      mark_packed(scope, slip)
+      {:ok, lv, _} = live(conn, ~p"/shipping_slips?date=#{@date_param}")
+
+      refute has_element?(lv, "#box-form-#{slip.id}")
+
+      html = render_submit(lv, "update_box_count", %{"slip_id" => slip.id, "box_count" => "9"})
+      assert html =~ "現在の状態では、この操作はできません。"
+      assert Repo.get!(ShippingSlip, slip.id).box_count == slip.box_count
+    end
+  end
+
+  describe "viewer は梱包完了・箱数の修正ができない" do
+    @describetag role: :viewer
+    setup :register_and_log_in_user
+
+    test "ボタン・入力欄が出ず、イベントを直接送っても拒否され、在庫 API も呼ばない", %{conn: conn} do
+      staff = user_scope_fixture(user_fixture(%{role: :staff, must_change_password: false}))
+      slip = allocated_slip(staff)
+      InventoryStub.routes([])
+
+      {:ok, lv, _} = live(conn, ~p"/shipping_slips?date=#{@date_param}")
+
+      refute has_element?(lv, "#pack-#{slip.id}")
+      refute has_element?(lv, "#box-form-#{slip.id}")
+
+      assert render_click(lv, "pack", %{"id" => slip.id}) =~ "権限がありません。"
+
+      assert render_submit(lv, "update_box_count", %{"slip_id" => slip.id, "box_count" => "9"}) =~
+               "権限がありません。"
+
+      row_in_db = Repo.get!(ShippingSlip, slip.id)
+      assert row_in_db.status == :allocated
+      assert row_in_db.box_count == slip.box_count
+      assert InventoryStub.calls() == []
     end
   end
 

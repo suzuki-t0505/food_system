@@ -66,10 +66,11 @@
 
 ## 5. 単位 E: 梱包完了(F-S4)
 
-- [ ] `ShippingSlips`: `pack_shipping_slip/2`・`update_box_count/3` とテスト(成功・409 → 照会で `shipped` なら `packed`・それ以外はエラー・在庫停止時に `allocated` のまま・復旧後の再実行・箱数の検証)
-- [ ] `ShippingSlipLive.Index` に「梱包完了」(確認ダイアログ・`busy`・グレーアウト)と箱数のインライン編集を追加、テスト
-- [ ] 例外ケース(§6.11 ⑧)のテスト
-- [ ] 品質ゲート、コミット・プッシュ
+- [x] `ShippingSlips`: `pack_shipping_slip/2`・`update_box_count/3` とテスト(成功・409 → 照会で `shipped` なら `packed`・それ以外はエラー・在庫停止時に `allocated` のまま・復旧後の再実行・箱数の検証)
+- [x] `ShippingSlipLive.Index` に「梱包完了」(確認ダイアログ・`busy`・グレーアウト)と箱数のインライン編集を追加、テスト
+- [x] 例外ケース(§6.11 ⑧)のテスト
+- [x] 品質ゲート、コミット・プッシュ
+- 実装メモ: 箱数の修正は DB だけの更新なので `Task` にせず同期で行う(`update_box_count/3`)。`pack_shipping_slip/2` は呼び出し時点の最新の伝票を読み直して検査する(古い画面の伝票でも拒否できる)
 
 ## 6. 仕上げ
 

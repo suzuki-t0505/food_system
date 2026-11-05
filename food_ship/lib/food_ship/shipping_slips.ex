@@ -225,7 +225,13 @@ defmodule FoodShip.ShippingSlips do
         clear_local_order(slip)
 
       {:shipped, order} ->
-        with {:ok, slip} <- mark_packed(scope, slip, order) do
+        with {:ok, slip} <-
+               mark_packed(
+                 scope,
+                 slip,
+                 order,
+                 {:replace, AllocationResult.lots_from_order(order)}
+               ) do
           {:ok, slip, %{reconciled: true}}
         end
 
@@ -284,6 +290,66 @@ defmodule FoodShip.ShippingSlips do
              do: {:ok, slip, Map.take(extra, [:errors])}
     end
   end
+
+  ## 梱包完了・箱数
+
+  @doc """
+  梱包完了(functional-design §6.4)。`allocated` のみ。在庫側の出庫確定 API を呼び、成功したら
+  `packed`・`packed_at`・`packed_by_user_id` を保存する(在庫側の `shipped_at` を `packed_at` にする)。
+
+    * 409 `invalid_state` は在庫側を照会し、すでに `shipped` なら発送側も `packed` に更新する。
+      それ以外は `{:error, {:remote_state, status}}`
+    * 在庫側が停止している間は `{:error, :connection}` で `allocated` のまま(復旧後にやり直す。
+      在庫側は冪等)
+    * 他の操作で状態が変わっていたら `{:error, :stale}`
+  """
+  def pack_shipping_slip(scope, %ShippingSlip{id: id}) do
+    with :ok <- authorize(scope, :pack_shipping_slips) do
+      slip = ShippingSlip |> Repo.get!(id) |> preload_slip()
+
+      if slip.status == :allocated and not is_nil(slip.inventory_order_id) do
+        ship_remote(scope, slip)
+      else
+        {:error, :invalid_status}
+      end
+    end
+  end
+
+  defp ship_remote(scope, slip) do
+    case InventoryClient.ship_order(slip.inventory_order_id, scope.user.email) do
+      {:ok, order} -> mark_packed(scope, slip, order, :keep)
+      {:error, :invalid_state} -> reconcile_shipped(scope, slip)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # 409 のとき、在庫側を照会する。出庫済みなら発送側も梱包完了にし、それ以外は最新の状態を返す
+  defp reconcile_shipped(scope, slip) do
+    case InventoryClient.get_order(slip.inventory_order_id) do
+      {:ok, %{status: :shipped} = order} -> mark_packed(scope, slip, order, :keep)
+      {:ok, order} -> {:error, {:remote_state, order.status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
+  箱数の修正(在庫には影響しない)。1 以上の整数。梱包前(`pending` / `allocated` / `shortage`)のみ。
+  """
+  def update_box_count(scope, %ShippingSlip{id: id}, box_count) do
+    with :ok <- authorize(scope, :pack_shipping_slips) do
+      Repo.transact(fn -> update_box_count_unpacked(lock_slip(id), box_count) end)
+    end
+  end
+
+  defp update_box_count_unpacked(%ShippingSlip{status: status} = slip, box_count)
+       when status in @unpacked do
+    case slip |> ShippingSlip.box_count_changeset(%{"box_count" => box_count}) |> Repo.update() do
+      {:ok, slip} -> {:ok, preload_slip(slip)}
+      {:error, changeset} -> {:error, changeset}
+    end
+  end
+
+  defp update_box_count_unpacked(_slip, _box_count), do: {:error, :invalid_status}
 
   ## 取消
 
@@ -360,8 +426,9 @@ defmodule FoodShip.ShippingSlips do
     apply_outcome(slip, %{status: :pending, shortage_pieces: nil, allocation_error: error}, :keep)
   end
 
-  # 在庫側が出庫済みなので、発送側も `packed` に合わせる。梱包者は操作したユーザー
-  defp mark_packed(scope, slip, order) do
+  # 在庫側が出庫済みなので、発送側も `packed` に合わせる。梱包者は操作したユーザー。
+  # `lots` は引当ロットの扱い(`:keep` か `{:replace, lots}`)
+  defp mark_packed(scope, slip, order, lots) do
     attrs = %{
       status: :packed,
       inventory_order_id: order.order_id,
@@ -371,7 +438,7 @@ defmodule FoodShip.ShippingSlips do
       packed_by_user_id: scope.user.id
     }
 
-    apply_outcome(slip, attrs, {:replace, AllocationResult.lots_from_order(order)})
+    apply_outcome(slip, attrs, lots)
   end
 
   ## 確保と結果の反映

@@ -37,11 +37,24 @@ defmodule FoodShip.ShippingSlipsTest do
   defp route_allocate(fun), do: {"POST", @orders, fun}
   defp route_list(fun), do: {"GET", @orders, fun}
   defp route_cancel(fun), do: {"POST", ~r{/cancel$}, fun}
+  defp route_ship(fun), do: {"POST", ~r{/ship$}, fun}
+  defp route_get(fun), do: {"GET", ~r{/shipment_orders/[^/]+$}, fun}
 
   defp respond_json(status, body), do: fn conn -> InventoryStub.json(conn, status, body) end
 
   defp slip_row(id), do: Repo.get!(ShippingSlip, id)
   defp lots_of(id), do: Repo.all(from l in SlipAllocatedLot, where: l.shipping_slip_id == ^id)
+
+  defp mark_packed_row(scope, slip) do
+    Repo.update_all(from(s in ShippingSlip, where: s.id == ^slip.id),
+      set: [
+        status: :packed,
+        inventory_order_id: @order_id,
+        packed_at: DateTime.utc_now(:second),
+        packed_by_user_id: scope.user.id
+      ]
+    )
+  end
 
   defp viewer_scope,
     do: user_scope_fixture(user_fixture(%{role: :viewer, must_change_password: false}))
@@ -861,6 +874,247 @@ defmodule FoodShip.ShippingSlipsTest do
 
       assert [{"GET", _, _}, {"POST", _, _}, {"POST", @orders, body}] = InventoryStub.calls()
       assert hd(body["lines"])["req_pieces"] == 12
+    end
+  end
+
+  describe "pack_shipping_slip/2" do
+    test "在庫側の出庫確定を呼び、成功したら packed・梱包者・日時を保存する(引当ロットは残す)" do
+      scope = staff_scope()
+      slip = allocated_slip(scope)
+      shipped = allocated_order(slip, %{status: "shipped", shipped_at: "2026-11-20T01:02:03Z"})
+      InventoryStub.routes([route_ship(respond_json(200, shipped))])
+
+      assert {:ok, packed} = ShippingSlips.pack_shipping_slip(scope, slip)
+
+      assert packed.status == :packed
+      assert packed.packed_by_user_id == scope.user.id
+      assert packed.packed_at == ~U[2026-11-20 01:02:03Z]
+      assert packed.inventory_order_id == @order_id
+      assert length(packed.allocated_lots) == 2
+
+      assert [{"POST", ship_path, %{"operator" => operator}}] = InventoryStub.calls()
+      assert ship_path == "#{@orders}/#{@order_id}/ship"
+      assert operator == scope.user.email
+    end
+
+    test "在庫側が停止している間は失敗して allocated のまま。復旧後にやり直すと packed になる" do
+      scope = staff_scope()
+      slip = allocated_slip(scope)
+      InventoryStub.routes([route_ship(&InventoryStub.timeout/1)])
+
+      assert {:error, :connection} = ShippingSlips.pack_shipping_slip(scope, slip)
+
+      row = slip_row(slip.id)
+      assert row.status == :allocated
+      assert row.packed_at == nil
+      assert row.packed_by_user_id == nil
+      assert row.inventory_order_id == @order_id
+
+      shipped = allocated_order(slip, %{status: "shipped", shipped_at: "2026-11-20T01:02:03Z"})
+      InventoryStub.routes([route_ship(respond_json(200, shipped))])
+
+      assert {:ok, %{status: :packed}} = ShippingSlips.pack_shipping_slip(scope, slip)
+    end
+
+    test "5xx も失敗扱いで allocated のまま" do
+      scope = staff_scope()
+      slip = allocated_slip(scope)
+
+      InventoryStub.routes([
+        route_ship(fn conn -> InventoryStub.error(conn, 503, "unavailable") end)
+      ])
+
+      assert {:error, :connection} = ShippingSlips.pack_shipping_slip(scope, slip)
+      assert slip_row(slip.id).status == :allocated
+    end
+
+    test "409 が返ったら照会し、在庫側がすでに shipped なら発送側も packed に更新する" do
+      scope = staff_scope()
+      slip = allocated_slip(scope)
+      shipped = allocated_order(slip, %{status: "shipped", shipped_at: "2026-11-19T05:00:00Z"})
+
+      InventoryStub.routes([
+        route_ship(fn conn -> InventoryStub.error(conn, 409, "invalid_state") end),
+        route_get(respond_json(200, shipped))
+      ])
+
+      assert {:ok, packed} = ShippingSlips.pack_shipping_slip(scope, slip)
+
+      assert packed.status == :packed
+      assert packed.packed_at == ~U[2026-11-19 05:00:00Z]
+      assert packed.packed_by_user_id == scope.user.id
+      assert [{"POST", _, _}, {"GET", get_path, nil}] = InventoryStub.calls()
+      assert get_path == "#{@orders}/#{@order_id}"
+    end
+
+    test "409 で在庫側が shipped 以外(解除済みなど)なら、最新の状態を返してエラーにする" do
+      scope = staff_scope()
+      slip = allocated_slip(scope)
+      cancelled = allocated_order(slip, %{status: "cancelled"})
+
+      InventoryStub.routes([
+        route_ship(fn conn -> InventoryStub.error(conn, 409, "invalid_state") end),
+        route_get(respond_json(200, cancelled))
+      ])
+
+      assert {:error, {:remote_state, :cancelled}} = ShippingSlips.pack_shipping_slip(scope, slip)
+
+      row = slip_row(slip.id)
+      assert row.status == :allocated
+      assert row.packed_at == nil
+    end
+
+    test "409 の照会に失敗した場合は、その失敗を返し、allocated のまま" do
+      scope = staff_scope()
+      slip = allocated_slip(scope)
+
+      InventoryStub.routes([
+        route_ship(fn conn -> InventoryStub.error(conn, 409, "invalid_state") end),
+        route_get(&InventoryStub.timeout/1)
+      ])
+
+      assert {:error, :connection} = ShippingSlips.pack_shipping_slip(scope, slip)
+      assert slip_row(slip.id).status == :allocated
+    end
+
+    test "401・404 はそのまま返し、allocated のまま" do
+      scope = staff_scope()
+      slip = allocated_slip(scope)
+
+      InventoryStub.routes([
+        route_ship(fn conn -> InventoryStub.error(conn, 401, "unauthorized") end)
+      ])
+
+      assert {:error, :unauthorized} = ShippingSlips.pack_shipping_slip(scope, slip)
+
+      InventoryStub.routes([
+        route_ship(fn conn -> InventoryStub.error(conn, 404, "not_found") end)
+      ])
+
+      assert {:error, :not_found} = ShippingSlips.pack_shipping_slip(scope, slip)
+
+      assert slip_row(slip.id).status == :allocated
+    end
+
+    test "allocated 以外(pending・shortage・packed・cancelled)は :invalid_status で、API を呼ばない" do
+      scope = staff_scope()
+      pending = slip_fixture(%{}, scope)
+      packed = allocated_slip(scope)
+      mark_packed_row(scope, packed)
+      {:ok, cancelled} = ShippingSlips.cancel_shipping_slip(scope, slip_fixture(%{}, scope))
+
+      for slip <- [pending, packed, cancelled] do
+        assert {:error, :invalid_status} = ShippingSlips.pack_shipping_slip(scope, slip)
+      end
+
+      assert InventoryStub.calls() == []
+    end
+
+    test "古い画面の伝票(すでに再引当で状態が変わっている)でも、最新の状態を見て拒否する" do
+      scope = staff_scope()
+      stale_view = allocated_slip(scope)
+
+      {:ok, _changed} =
+        ShippingSlips.update_shipping_slip(scope, stale_view, %{"order_count" => "1"})
+
+      assert {:error, :invalid_status} = ShippingSlips.pack_shipping_slip(scope, stale_view)
+      assert InventoryStub.calls() == []
+    end
+
+    test "API の呼び出し中に別の操作で状態が変わっていたら :stale(結果を反映しない)" do
+      scope = staff_scope()
+      slip = allocated_slip(scope)
+
+      InventoryStub.routes([
+        route_ship(fn conn ->
+          Repo.update_all(from(s in ShippingSlip, where: s.id == ^slip.id),
+            set: [status: :pending]
+          )
+
+          InventoryStub.json(conn, 200, allocated_order(slip, %{status: "shipped"}))
+        end)
+      ])
+
+      assert {:error, :stale} = ShippingSlips.pack_shipping_slip(scope, slip)
+      assert slip_row(slip.id).status == :pending
+    end
+
+    test "viewer は拒否し、API を呼ばない" do
+      slip = allocated_slip(staff_scope())
+
+      assert {:error, :forbidden} = ShippingSlips.pack_shipping_slip(viewer_scope(), slip)
+      assert slip_row(slip.id).status == :allocated
+      assert InventoryStub.calls() == []
+    end
+
+    test "梱包完了後は、再引当・取消・数量変更ができない" do
+      scope = staff_scope()
+      slip = allocated_slip(scope)
+      shipped = allocated_order(slip, %{status: "shipped", shipped_at: "2026-11-20T01:02:03Z"})
+      InventoryStub.routes([route_ship(respond_json(200, shipped))])
+      {:ok, packed} = ShippingSlips.pack_shipping_slip(scope, slip)
+      InventoryStub.calls()
+
+      assert {:error, :invalid_status} = ShippingSlips.allocate_shipping_slip(scope, packed)
+      assert {:error, :invalid_status} = ShippingSlips.cancel_shipping_slip(scope, packed)
+
+      assert {:error, :invalid_status} =
+               ShippingSlips.update_shipping_slip(scope, packed, %{"order_count" => "1"})
+
+      assert InventoryStub.calls() == []
+    end
+  end
+
+  describe "update_box_count/3" do
+    test "箱数を修正できる(在庫 API は呼ばない。数量は変わらない)" do
+      scope = staff_scope()
+      slip = allocated_slip(scope)
+
+      assert {:ok, updated} = ShippingSlips.update_box_count(scope, slip, "4")
+
+      assert updated.box_count == 4
+      assert updated.total_piece_qty == slip.total_piece_qty
+      assert updated.status == :allocated
+      assert InventoryStub.calls() == []
+    end
+
+    test "整数も受け付ける。pending・shortage の伝票も修正できる" do
+      scope = staff_scope()
+      slip = slip_fixture(%{}, scope)
+
+      assert {:ok, %{box_count: 9}} = ShippingSlips.update_box_count(scope, slip, 9)
+    end
+
+    test "1 未満・整数でない値は changeset エラーで、箱数は変わらない" do
+      scope = staff_scope()
+      slip = slip_fixture(%{}, scope)
+
+      for value <- ["0", "-1", "abc", "", "1.5"] do
+        assert {:error, %Ecto.Changeset{} = changeset} =
+                 ShippingSlips.update_box_count(scope, slip, value)
+
+        assert Map.has_key?(errors_on(changeset), :box_count)
+      end
+
+      assert slip_row(slip.id).box_count == slip.box_count
+    end
+
+    test "梱包済み・取消済みの伝票は修正できない" do
+      scope = staff_scope()
+      packed = allocated_slip(scope)
+      mark_packed_row(scope, packed)
+      {:ok, cancelled} = ShippingSlips.cancel_shipping_slip(scope, slip_fixture(%{}, scope))
+
+      assert {:error, :invalid_status} = ShippingSlips.update_box_count(scope, packed, "3")
+      assert {:error, :invalid_status} = ShippingSlips.update_box_count(scope, cancelled, "3")
+      assert slip_row(packed.id).box_count == packed.box_count
+    end
+
+    test "viewer は拒否する" do
+      slip = slip_fixture()
+
+      assert {:error, :forbidden} = ShippingSlips.update_box_count(viewer_scope(), slip, "3")
+      assert slip_row(slip.id).box_count == slip.box_count
     end
   end
 

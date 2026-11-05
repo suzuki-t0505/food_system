@@ -6,7 +6,8 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
   (すべて／未梱包のみ／在庫不足のみ)を持つ。各伝票には、引当ロットの「期限日 × 個数」を表示する。
   `pending` の行には、引当エラーの種別(一時／恒久)と最終試行日時を表示する。
 
-  在庫 API を呼ぶ操作(再引当・取消)は `Task` ＋ `handle_info` で非同期に行い、実行中の伝票の
+  梱包完了(在庫側の出庫確定)と箱数の修正は `staff` 以上。箱数は梱包前の伝票でインライン編集できる
+  (在庫数には影響しない)。在庫 API を呼ぶ操作(再引当・取消・梱包完了)は `Task` ＋ `handle_info` で非同期に行い、実行中の伝票の
   行・ボタンを無効化する(`busy`)。操作ログは結果を受ける `handle_info` の成功節で出す。
   """
 
@@ -95,7 +96,7 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
               <th class="text-right">バラ数</th>
               <th>ピッキング対象(期限日 × 個数)</th>
               <th>状態</th>
-              <th :if={@can_manage}></th>
+              <th :if={@can_manage or @can_pack}></th>
             </tr>
           </thead>
           <tbody>
@@ -114,7 +115,33 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
               <td>{slip.client.client_name}</td>
               <td>{slip.shipping_item.item_code} {slip.shipping_item.item_name}</td>
               <td class="text-right">{slip.order_count}</td>
-              <td class="text-right">{slip.box_count}</td>
+              <td class="text-right">
+                <form
+                  :if={@can_pack and ShippingSlip.unpacked?(slip)}
+                  id={"box-form-#{slip.id}"}
+                  phx-submit="update_box_count"
+                  class="flex items-center justify-end gap-1"
+                >
+                  <input type="hidden" name="slip_id" value={slip.id} />
+                  <input
+                    type="number"
+                    name="box_count"
+                    value={slip.box_count}
+                    min="1"
+                    class="input input-sm w-16 text-right"
+                    aria-label="箱数"
+                    disabled={MapSet.member?(@busy, slip.id)}
+                  />
+                  <button
+                    class="btn btn-sm btn-ghost"
+                    disabled={MapSet.member?(@busy, slip.id)}
+                    id={"update-box-count-#{slip.id}"}
+                  >
+                    更新
+                  </button>
+                </form>
+                <span :if={!(@can_pack and ShippingSlip.unpacked?(slip))}>{slip.box_count}</span>
+              </td>
               <td class="text-right">{slip.total_piece_qty}</td>
               <td><.allocated_lots lots={slip.allocated_lots} /></td>
               <td>
@@ -124,6 +151,9 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
                   class="badge badge-outline badge-sm whitespace-nowrap"
                 >
                   追加
+                </span>
+                <span :if={slip.status == :packed} class="block text-xs">
+                  {ConvertDatetime.format_jst(slip.packed_at)}
                 </span>
                 <span :if={slip.status == :shortage} class="block text-xs text-error">
                   不足 {slip.shortage_pieces} 個
@@ -136,9 +166,20 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
                 </span>
                 <span :if={MapSet.member?(@busy, slip.id)} class="block text-xs">処理中…</span>
               </td>
-              <td :if={@can_manage} class="space-x-1 text-right whitespace-nowrap">
+              <td :if={@can_manage or @can_pack} class="space-x-1 text-right whitespace-nowrap">
                 <button
-                  :if={slip.status in [:pending, :shortage]}
+                  :if={@can_pack and slip.status == :allocated}
+                  phx-click="pack"
+                  phx-value-id={slip.id}
+                  disabled={MapSet.member?(@busy, slip.id)}
+                  data-confirm="梱包完了にします。在庫が減算され、元に戻せません。よろしいですか?"
+                  class="btn btn-sm btn-primary"
+                  id={"pack-#{slip.id}"}
+                >
+                  梱包完了
+                </button>
+                <button
+                  :if={@can_manage and slip.status in [:pending, :shortage]}
                   phx-click="reallocate"
                   phx-value-id={slip.id}
                   disabled={MapSet.member?(@busy, slip.id)}
@@ -148,7 +189,7 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
                   再引当
                 </button>
                 <.link
-                  :if={ShippingSlip.unpacked?(slip)}
+                  :if={@can_manage and ShippingSlip.unpacked?(slip)}
                   navigate={~p"/shipping_slips/#{slip.id}/edit"}
                   class={["btn btn-sm", MapSet.member?(@busy, slip.id) && "btn-disabled"]}
                   id={"edit-#{slip.id}"}
@@ -156,7 +197,7 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
                   数量変更
                 </.link>
                 <button
-                  :if={ShippingSlip.unpacked?(slip)}
+                  :if={@can_manage and ShippingSlip.unpacked?(slip)}
                   phx-click="cancel"
                   phx-value-id={slip.id}
                   disabled={MapSet.member?(@busy, slip.id)}
@@ -186,6 +227,7 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
      socket
      |> assign(:busy, MapSet.new())
      |> assign(:can_manage, Permission.can?(user, :manage_shipping_slips))
+     |> assign(:can_pack, Permission.can?(user, :pack_shipping_slips))
      |> assign(:warehouse_configured, ShippingSlips.warehouse_configured?())}
   end
 
@@ -211,11 +253,45 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
     end
   end
 
-  def handle_event("reallocate", %{"id" => id}, socket),
-    do: start_action(socket, id, :allocate, &ShippingSlips.allocate_shipping_slip/2)
+  def handle_event("reallocate", %{"id" => id}, socket) do
+    start_action(
+      socket,
+      id,
+      :manage_shipping_slips,
+      :allocate,
+      &ShippingSlips.allocate_shipping_slip/2
+    )
+  end
 
-  def handle_event("cancel", %{"id" => id}, socket),
-    do: start_action(socket, id, :cancel, &ShippingSlips.cancel_shipping_slip/2)
+  def handle_event("cancel", %{"id" => id}, socket) do
+    start_action(
+      socket,
+      id,
+      :manage_shipping_slips,
+      :cancel,
+      &ShippingSlips.cancel_shipping_slip/2
+    )
+  end
+
+  def handle_event("pack", %{"id" => id}, socket) do
+    start_action(socket, id, :pack_shipping_slips, :pack, &ShippingSlips.pack_shipping_slip/2)
+  end
+
+  # 箱数の修正は DB だけの更新なので、Task にせず同期で行う
+  def handle_event("update_box_count", %{"slip_id" => id, "box_count" => box_count}, socket) do
+    cond do
+      !socket.assigns.can_pack ->
+        {:noreply, put_flash(socket, :error, SlipMessages.error_message(:forbidden))}
+
+      MapSet.member?(socket.assigns.busy, id) ->
+        {:noreply, socket}
+
+      true ->
+        slip = ShippingSlips.get_shipping_slip!(id)
+        result = ShippingSlips.update_box_count(socket.assigns.current_scope, slip, box_count)
+        {:noreply, socket |> box_count_result(result) |> assign_slips()}
+    end
+  end
 
   @impl true
   def handle_info({:slip_result, action, id, result}, socket) do
@@ -233,9 +309,9 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
   end
 
   # 在庫 API を呼ぶ操作を Task で始める。権限は、ボタンの表示とは別にここで検査する
-  defp start_action(socket, id, action, fun) do
+  defp start_action(socket, id, permission, action, fun) do
     cond do
-      !socket.assigns.can_manage ->
+      !Permission.can?(socket.assigns.current_scope.user, permission) ->
         {:noreply, put_flash(socket, :error, SlipMessages.error_message(:forbidden))}
 
       MapSet.member?(socket.assigns.busy, id) ->
@@ -254,8 +330,28 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
 
   defp result_message(:allocate, result), do: SlipMessages.allocation_result(result)
 
+  defp result_message(:pack, {:ok, _slip}), do: {:info, "梱包完了にしました。"}
+
+  # 在庫側が停止している間は梱包完了を記録できない(allocated のまま)。復旧後にやり直す
+  defp result_message(:pack, {:error, :connection}),
+    do: {:error, "在庫システムに接続できませんでした。時間をおいて、もう一度梱包完了を行ってください。"}
+
+  defp result_message(:pack, {:error, reason}), do: {:error, SlipMessages.error_message(reason)}
+
   defp result_message(:cancel, {:ok, _slip}), do: {:info, "伝票を取り消しました。"}
   defp result_message(:cancel, {:error, reason}), do: {:error, SlipMessages.error_message(reason)}
+
+  defp box_count_result(socket, {:ok, slip}) do
+    message = "箱数を更新しました。"
+    OperationLog.info(socket, message, :update, slip)
+    put_flash(socket, :info, message)
+  end
+
+  defp box_count_result(socket, {:error, %Ecto.Changeset{}}),
+    do: put_flash(socket, :error, "箱数は 1 以上の整数で入力してください。")
+
+  defp box_count_result(socket, {:error, reason}),
+    do: put_flash(socket, :error, SlipMessages.error_message(reason))
 
   defp assign_slips(socket) do
     %{date: date, filter: filter} = socket.assigns
