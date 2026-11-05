@@ -116,6 +116,7 @@ infra/terraform/
 | ingress | `INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER` |
 | egress | 在庫: `PRIVATE_RANGES_ONLY` / 発送: `ALL_TRAFFIC`(Direct VPC egress、サブネット `food-system-run`) |
 | ポート・タイムアウト | `4000`、リクエストタイムアウト 3600 秒(LiveView の WebSocket) |
+| 実行環境 | 第 2 世代(`runtime.exs` が IPv6 の `::` で待ち受けるため、Linux 互換の実行環境にする。Job も同じ) |
 | リソース | 1 vCPU / 1 GiB、スケールは変数 |
 | 環境変数 | `PHX_SERVER=true`・`PHX_HOST=<app>.<domain>`・`POOL_SIZE=5`・`DATABASE_URL`・`SECRET_KEY_BASE`(秘密参照) |
 | 在庫のみ | `INVENTORY_API_TOKENS`(秘密参照) |
@@ -161,7 +162,7 @@ infra/terraform/
 
 - 両アプリで実行する(Docker Compose 経由: `docker compose run --rm food_vault_web mix phx.gen.release --docker`)
 - 生成物: `Dockerfile`・`.dockerignore`・`rel/overlays/bin/server`・`rel/overlays/bin/migrate`・`lib/<app>/release.ex`(既存のため上書き確認が出る。**上書きせず**、生成される `migrate/0`・`rollback/2` を既存ファイルへ手で取り込む)
-- `Dockerfile` のベースイメージは生成時の Elixir / OTP(1.20.5 / 29)に合わせて出力される。出力を確認し、ずれていれば直す
+- `Dockerfile` のベースイメージは生成時の Elixir / OTP に合わせて出力される(結果: `hexpm/elixir:1.20.5-erlang-29.1.2-debian-trixie-20261104-slim`、実行は `debian:trixie-20261104-slim`・ユーザー `nobody`。修正不要)
 - アセットは `mix assets.deploy`(tailwind / esbuild のみ。npm 依存は無い)で生成 Dockerfile のまま動く
 
 ### 5.2 `{App}.Release`(両アプリ)

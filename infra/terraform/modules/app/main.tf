@@ -128,6 +128,8 @@ resource "google_cloud_run_v2_service" "this" {
   template {
     service_account = google_service_account.this.email
     timeout         = "3600s" # LiveView の WebSocket
+    # Endpoint は IPv6 の全アドレス({0,0,0,0,0,0,0,0})で待ち受けるため、Linux 互換の第 2 世代を使う
+    execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
 
     scaling {
       min_instance_count = var.min_instances
@@ -214,9 +216,10 @@ resource "google_cloud_run_v2_job" "migrate" {
     task_count = 1
 
     template {
-      service_account = google_service_account.this.email
-      max_retries     = 0
-      timeout         = "600s"
+      service_account       = google_service_account.this.email
+      execution_environment = "EXECUTION_ENVIRONMENT_GEN2"
+      max_retries           = 0
+      timeout               = "600s"
 
       vpc_access {
         egress = "PRIVATE_RANGES_ONLY"
