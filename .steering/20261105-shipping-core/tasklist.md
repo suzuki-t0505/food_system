@@ -6,20 +6,20 @@
 
 ## 0. 実行環境
 
-- [ ] テスト実行環境を用意し、既存の `food_ship` の `mix test` が通ることを確認する(初回は `mix deps.get` が必要)
-- [ ] `req` のバージョンと `Req.Test`(共有モード・`allow/3`)の使い方を確認する(design §12)
+- [x] テスト実行環境を用意し、既存の `food_ship` の `mix test` が通ることを確認する(初回は `mix deps.get` が必要)
+- [x] `req` のバージョンと `Req.Test`(共有モード・`allow/3`)の使い方を確認する(design §12)
 
 ## 1. 単位 A: 基盤・`Inventory.Client`
 
-- [ ] `Utils.ConvertDatetime`(在庫側のコピー)・`Utils.Calc`(`total_piece_qty`・`default_box_count`・`min_expiration_date`)とテスト
-- [ ] `Utils.Permission` に `manage_masters`・`manage_shipping_slips`・`pack_shipping_slips` と `authorize/2` を追加し、テストを更新
-- [ ] `config/runtime.exs`(`FoodShip.Inventory.Client` の設定。本番は `INVENTORY_API_BASE_URL`・`INVENTORY_API_TOKEN` が未設定なら `raise`、`INVENTORY_WAREHOUSE_ID` は空なら `nil`)、`config/test.exs`(固定値・`retry_base_ms: 0`・`req_options` のスタブ)
-- [ ] `FoodShip.Inventory.Client`(`allocate/1`・`ship_order/2`・`cancel_order/3`・`get_order/1`・`list_orders_by_slip/1`・`find_item/1`、共通エラーの変換、リトライ、`:api` ログ)
-- [ ] `Client` のテスト(成功・各エラー・リトライの対象と対象外・接続エラー・不正な本文・`Authorization`/`operator`・トークンがログに出ない)
-- [ ] テスト用スタブヘルパー(`test/support/inventory_stub.ex`)
-- [ ] `docker-compose.yml` に発送側の `INVENTORY_*` を追加、`food_ship/README.md` に倉庫 ID の設定手順を追記
-- [ ] `router.ex` に `require_authenticated_staff_user` plug があるか確認し、無ければ追加(`UserAuth`・テスト)
-- [ ] 品質ゲート、コミット・プッシュ
+- [x] `Utils.ConvertDatetime`(在庫側のコピー)・`Utils.Calc`(`total_piece_qty`・`default_box_count`・`min_expiration_date`)とテスト
+- [x] `Utils.Permission` に `manage_masters`・`manage_shipping_slips`・`pack_shipping_slips` と `authorize/2` を追加し、テストを更新
+- [x] `config/runtime.exs`(`FoodShip.Inventory.Client` の設定。本番は `INVENTORY_API_BASE_URL`・`INVENTORY_API_TOKEN` が未設定なら `raise`、`INVENTORY_WAREHOUSE_ID` は空なら `nil`)、`config/test.exs`(固定値・`retry_base_ms: 0`・`req_options` のスタブ)
+- [x] `FoodShip.Inventory.Client`(`allocate/1`・`ship_order/2`・`cancel_order/3`・`get_order/1`・`list_orders_by_slip/1`・`find_item/1`、共通エラーの変換、リトライ、`:api` ログ)
+- [x] `Client` のテスト(成功・各エラー・リトライの対象と対象外・接続エラー・不正な本文・`Authorization`/`operator`・トークンがログに出ない)
+- [x] テスト用スタブヘルパー(`test/support/inventory_stub.ex`)
+- [x] `docker-compose.yml` に発送側の `INVENTORY_*` を追加、`food_ship/README.md` に倉庫 ID の設定手順を追記
+- [x] `router.ex` に `require_authenticated_staff_user` plug があるか確認し、無ければ追加(`UserAuth`・テスト)
+- [x] 品質ゲート、コミット・プッシュ
 
 ## 2. 単位 B: マスタ(F-S1)
 

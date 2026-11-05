@@ -46,12 +46,39 @@ defmodule FoodShip.Utils.PermissionTest do
       assert Permission.can?(@viewer, :change_own_password)
     end
 
+    test "マスタの編集 (manage_masters) は admin のみ" do
+      assert Permission.can?(@admin, :manage_masters)
+      refute Permission.can?(@staff, :manage_masters)
+      refute Permission.can?(@viewer, :manage_masters)
+    end
+
+    test "伝票の登録・再引当・数量変更・取消 (manage_shipping_slips) は staff 以上" do
+      assert Permission.can?(@admin, :manage_shipping_slips)
+      assert Permission.can?(@staff, :manage_shipping_slips)
+      refute Permission.can?(@viewer, :manage_shipping_slips)
+    end
+
+    test "箱数の修正・梱包完了 (pack_shipping_slips) は staff 以上" do
+      assert Permission.can?(@admin, :pack_shipping_slips)
+      assert Permission.can?(@staff, :pack_shipping_slips)
+      refute Permission.can?(@viewer, :pack_shipping_slips)
+    end
+
     test "未定義のアクションは拒否する" do
       refute Permission.can?(@admin, :no_such_action)
     end
 
     test "nil は拒否する" do
       refute Permission.can?(nil, :no_such_action)
+    end
+  end
+
+  describe "authorize/2" do
+    test "許可されれば :ok、されなければ {:error, :forbidden}" do
+      assert :ok = Permission.authorize(@staff, :manage_shipping_slips)
+      assert {:error, :forbidden} = Permission.authorize(@viewer, :manage_shipping_slips)
+      assert {:error, :forbidden} = Permission.authorize(nil, :manage_shipping_slips)
+      assert {:error, :forbidden} = Permission.authorize(@admin, :no_such_action)
     end
   end
 end
