@@ -43,14 +43,14 @@
 
 ### Cloud Run Job(マイグレーション兼シード)
 
-- 1 回の実行で ①マイグレーション → ②シード(初期管理者の作成。冪等)を行う
+- 1 回の実行で ①マイグレーション → ②シード(`priv/repo/seeds.exs`。初期管理者と開発用マスタ。どちらも冪等)を行う
+- 今回の GCP 環境は**開発環境用**のため、開発用マスタ(在庫: メーカー 2・倉庫 2・商品 3)も投入する
 - デプロイ手順は「イメージ更新 → ジョブ実行 → サービス更新」の順(README に記す)
-- 開発用マスタ(`seeds.exs` のメーカー A など)は本番に入れない
 
 ### アプリ側の追加(Terraform を動かすのに必要な最小限)
 
-- 両アプリに本番用 `Dockerfile`(`mix release`。root 以外のユーザーで実行)
-- 両アプリの `{App}.Release` に `migrate/0` と、Job から呼ぶ `migrate_and_seed/0` を追加
+- 両アプリに本番用 `Dockerfile` と `Release` を **`mix phx.gen.release --docker` で生成**する(root 以外のユーザーで実行)
+- 生成物に合わせて `{App}.Release` を修正し、既存の `create_initial_admin/0`・`run/0` を残したまま `migrate/0`(生成)と Job から呼ぶ `migrate_and_seed/0` を持たせる
 - `INVENTORY_API_BASE_URL` / `INVENTORY_API_TOKEN` は環境変数として Cloud Run に渡すだけ(`food_ship` 側の読み込み実装は段階 4)
 
 ### 周辺
@@ -64,9 +64,11 @@
 - `X-Forwarded-For` からの送信元 IP の扱い(§12)
 - 発送システムの業務機能・在庫 API クライアントの実装(段階 4)
 
-## 確認したい点
+## 確認結果
 
-1. 両アプリ(在庫・発送)とも GCP に載せる前提でよいか
-2. シードは「初期管理者の作成のみ」でよいか(開発用マスタも入れたい場合は指定)
-3. 本番 `Dockerfile` と `Release.migrate` の追加まで今回のスコープに含めてよいか
-4. リージョン(既定案: `asia-northeast1`)とドメイン名の有無
+| # | 内容 | 決定 |
+| :-- | :-- | :-- |
+| 1 | 対象アプリ | 在庫・発送の両方を GCP に載せる |
+| 2 | シード | 開発環境用のため、初期管理者に加えて開発用マスタも投入する |
+| 3 | 本番 Dockerfile・Release | `mix phx.gen.release --docker` で生成し、必要に応じて `release.ex` を修正する |
+| 4 | リージョン・ドメイン | `asia-northeast1`。独自ドメインあり(変数 `domain` で指定) |
