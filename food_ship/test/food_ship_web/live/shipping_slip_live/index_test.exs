@@ -515,6 +515,8 @@ defmodule FoodShipWeb.ShippingSlipLive.IndexTest do
       lv |> element("#pack-#{slip.id}") |> render_click()
       wait_until(fn -> assert render(lv) =~ "梱包完了にしました。" end)
       assert status_of(slip) == :packed
+      # 前の失敗のメッセージは残らない(最新の結果だけを表示する)
+      refute render(lv) =~ "時間をおいて、もう一度梱包完了を行ってください。"
     end
 
     test "409 が返り、在庫側がすでに出庫済みなら、梱包完了に更新する", %{conn: conn, scope: scope} do

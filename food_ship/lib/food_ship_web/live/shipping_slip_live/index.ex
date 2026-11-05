@@ -305,7 +305,7 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
     end
 
     # 失敗でも、他の操作で状態が変わっている可能性があるので、伝票と残件数を読み直す
-    {:noreply, socket |> put_flash(kind, message) |> refresh_tabs() |> assign_slips()}
+    {:noreply, socket |> flash_once(kind, message) |> refresh_tabs() |> assign_slips()}
   end
 
   # 在庫 API を呼ぶ操作を Task で始める。権限は、ボタンの表示とは別にここで検査する
@@ -344,14 +344,17 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
   defp box_count_result(socket, {:ok, slip}) do
     message = "箱数を更新しました。"
     OperationLog.info(socket, message, :update, slip)
-    put_flash(socket, :info, message)
+    flash_once(socket, :info, message)
   end
 
   defp box_count_result(socket, {:error, %Ecto.Changeset{}}),
-    do: put_flash(socket, :error, "箱数は 1 以上の整数で入力してください。")
+    do: flash_once(socket, :error, "箱数は 1 以上の整数で入力してください。")
 
   defp box_count_result(socket, {:error, reason}),
-    do: put_flash(socket, :error, SlipMessages.error_message(reason))
+    do: flash_once(socket, :error, SlipMessages.error_message(reason))
+
+  # 前の操作のメッセージ(別の種類を含む)を消してから、最新の結果だけを表示する
+  defp flash_once(socket, kind, message), do: socket |> clear_flash() |> put_flash(kind, message)
 
   defp assign_slips(socket) do
     %{date: date, filter: filter} = socket.assigns

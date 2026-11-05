@@ -265,7 +265,7 @@ erDiagram
 | :-- | :-- | :-- |
 | `slip_no` | integer | NOT NULL, UNIQUE。DB シーケンスで採番（読み取り専用）。`S-000123` 形式で表示 |
 | `client_id` / `shipping_item_id` | ULID | NOT NULL, FK |
-| `total_pick_id` | ULID | NULL可, FK。未ピックは NULL。作成時に紐づくのは `allocated` のみ。`packed` になっても外さない |
+| `total_pick_id` | ULID | NULL可, FK。未ピックは NULL。作成時に紐づくのは `allocated` のみ。`packed` になっても外さない。**列は `total_picks` と一緒に段階 5 で追加する**（段階 4 の `shipping_slips` には無い） |
 | `client_slip_no` | string | NULL可（手入力は任意、CSV は必須） |
 | `scheduled_ship_date` | date | NOT NULL（ソート・集計の基準軸） |
 | `order_count` | integer | NOT NULL, CHECK `> 0` |
@@ -276,7 +276,7 @@ erDiagram
 | `status` | Ecto.Enum | NOT NULL, DEFAULT `pending`。`pending` / `allocated` / `shortage` / `packed` / `cancelled` / `reversed` |
 | `shortage_pieces` | integer | NULL可。`shortage` のときだけ値を持つ |
 | `allocation_error` | Ecto.Enum | NULL可。`connection`（一時）/ `unauthorized` / `not_found` / `validation_failed` / `idempotency_conflict`（恒久）。成功で NULL に戻す |
-| `allocation_attempted_at` | utc_datetime | NULL可 |
+| `allocation_attempted_at` | utc_datetime_usec | NULL可。在庫 API を呼ぶ前に「確保」として更新する。同じ伝票の同時操作を見分けるためマイクロ秒精度（architecture §9.4） |
 | `input_source` | Ecto.Enum | NOT NULL。`manual` / `csv` |
 | `created_by_user_id` | ULID | NOT NULL, FK |
 | `packed_by_user_id` / `packed_at` | ULID / utc_datetime | NULL可 |
@@ -542,7 +542,8 @@ sequenceDiagram
   SH-->>UI: allocated / shortage / pending(allocation_error)
 ```
 
-- 引当合計が `total_piece_qty` と一致しなければ `allocated` にせず、`allocation_error = validation_failed` として `pending` に残す。
+- 在庫側へ渡す `external_slip_id` は**伝票の `id`（ULID）**。再引当・数量変更でも同じ値を使い、在庫側が `cancelled` 以外の同一 ID だけを冪等判定することで「解除 → 同じ ID で再引当」ができる。
+- 引当合計が `total_piece_qty` と一致しなければ `allocated` にせず、`allocation_error = validation_failed` として `pending` に残す（在庫側に残ったオーダーは、次の再引当で解除できるよう `inventory_order_id` を保存する）。
 - 引当解除が失敗した場合は `pending` のまま止まり、次の再引当で手順 2 からやり直す。
 
 **一括再引当**: `pending` / `shortage` の伝票を **出荷予定日の昇順 → `slip_no` の昇順**で順に再引当し、伝票ごとの成否を一覧表示する。恒久エラーの行は既定では対象外（修正後に個別に再引当）。
@@ -566,7 +567,7 @@ sequenceDiagram
 
 - 作業画面は出荷予定日ごとにタブ分け・ソートして表示する。タブの「残件数」は `pending` / `allocated` / `shortage` の合計。
 - 各伝票行に、引き当てられたロットの「期限日（例：2026-12-20）× 個数」を表示する。現場担当者はその期限の商品を目視確認してピッキング・梱包する。
-- 梱包時に実際の箱数が変わった場合は、画面上で箱数を修正できる（在庫数には影響しない）。分割梱包は扱わない。
+- 梱包時に実際の箱数が変わった場合は、画面上で箱数を修正できる（在庫数には影響しない）。修正できるのは**梱包完了にする前（未梱包の間）**で、1 以上の整数。分割梱包は扱わない。
 
 **梱包完了**:
 
@@ -632,7 +633,7 @@ sequenceDiagram
 
 ### 6.10 マスタ（F-S1）
 
-- **発送商品**: 商品コードを入力すると、在庫側 `GET /api/v1/items?item_code=` から `inventory_item_id`・`item_name`・`inventory_maker_id`・`maker_name` を取得して初期入力する。取得した値のコピーであり、在庫側の変更は自動同期しない（マスタ画面から再取得）。再取得で `inventory_maker_id` が変わっても、作成済みトータルピックには影響しない。
+- **発送商品**: 登録は「商品コードで取得 → 標準箱数・商品数量を入力して保存」の 2 段階（取得した在庫側の値は画面に載せずサーバー側で保持する）。編集できるのは換算（標準箱数・商品数量）だけで、在庫側の値は「再取得」で更新する。商品コードを入力すると、在庫側 `GET /api/v1/items?item_code=` から `inventory_item_id`・`item_name`・`inventory_maker_id`・`maker_name` を取得して初期入力する。取得した値のコピーであり、在庫側の変更は自動同期しない（マスタ画面から再取得）。再取得で `inventory_maker_id` が変わっても、作成済みトータルピックには影響しない。
 - **出荷期限ルール**: 引当時点の最低許容期限日は伝票が保持するため、ルールを後から変更・削除しても **引当済み・梱包済みの伝票**には影響しない。`shortage` / `pending` の再引当は、その時点のルールで再計算する。
 - **発注元**: アーカイブ済みは新規伝票の選択肢に出さない。
 
@@ -796,6 +797,8 @@ sequenceDiagram
 | トータルピック一覧・詳細 | 出荷予定日・発注元・メーカー・状態（発行済／要再発行／取消）で検索。詳細にピック明細（商品 × 期限日の合算）・仕分け内訳・紐づく伝票一覧。PDF ダウンロード（ピック表のみ／ピック表＋作業指示書。`outdated` は再発行後のみ）、再発行、取消 | 参照は全ロール／PDF・再発行・取消は `staff` 以上 |
 | マスタ管理 | 発注元、発送商品・梱包換算（在庫側から再取得）、出荷期限ルールの CRUD | 参照は全ロール／編集は `admin` |
 | ユーザー管理 | 一覧・登録・ロール変更・パスワード再設定・アーカイブ | `admin` |
+
+**段階 4 で実装したルーティング（発送）**: `/`（作業画面へ redirect）、`/shipping_slips`（作業画面。`?date=YYYY-MM-DD&filter=all|unpacked|shortage`。全ロール）、`/shipping_slips/new`・`/shipping_slips/:id/edit`（伝票登録・数量変更。`staff` 以上）、`/masters/clients`・`/masters/shipping_items`・`/masters/expiration_rules`（参照。全ロール）、`/management/{clients,shipping_items,expiration_rules}/new|:id/edit`（編集。`admin`）。対象倉庫（`INVENTORY_WAREHOUSE_ID`）が未設定の間は、伝票登録・再引当・数量変更を拒否して画面に警告を出す。
 
 PDF 帳票は LiveView ではなく Controller（`ReportController`：`total_pick/2`・`work_order/2`・`total_pick_bundle/2`）でダウンロード配信し、認可は HTTP plug で `staff` 以上に限定する。
 
