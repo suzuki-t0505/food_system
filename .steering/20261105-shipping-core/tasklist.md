@@ -51,17 +51,18 @@
   - `allocate_shipping_slip/2` の戻り値は常に `{:ok, slip, info}`(`info` は `errors`・`reconciled`)または `{:error, ...}`
   - `ShippingSlips.warehouse_configured?/0`・`list_shipping_slips/2` を追加。作業画面(`ShippingSlipLive.Index`)は単位 C では一覧のみの暫定版(単位 D で作り込む)
   - 残る競合: 同じ伝票を同時に操作された場合、後から確保した側だけが結果を反映する(`:stale`)が、在庫側への呼び出しは両方が行う。在庫側が冪等なので整合は保たれる(片方の解除が他方の引当後に届く稀なケースは、梱包完了時の 409 突合で検出する)
-  - `Utils.Calc` の `ShippingSlipsFixtures`・`ConcurrencyCase`・`InventoryStub.routes/1` をテスト基盤に追加
+  - テスト基盤に `ShippingSlipsFixtures`・`ConcurrencyCase`・`InventoryStub.routes/1`(メソッド・パスで応答を振り分ける)を追加
 
 ## 4. 単位 D: 作業画面・数量変更・取消(F-S3)
 
-- [ ] `ShippingSlips`: `list_shipping_slips/2`・`summarize_ship_dates/1`・`cancel_shipping_slip/2` とテスト(各状態・解除失敗でローカルが変わらない・在庫側 `shipped` は拒否)
-- [ ] `ShippingSlipLive.Index`(タブ・残件数・フィルタ・伝票行・引当ロット表示・エラー表示・ハイライト・`busy`・再引当・取消・数量変更リンク)
-- [ ] `ShippingSlipLive.Components`(状態バッジ・ロット表示・エラー表示)
-- [ ] `/` を作業画面へ redirect、`Layouts` のナビに「作業画面」「伝票登録」を追加し、`page_controller` のテストを更新
-- [ ] LiveView のテスト(表示・フィルタ・`viewer` に操作が無い・イベント直接送信の拒否・取消の記録・再引当で復旧)
-- [ ] 例外ケース(§6.11 ①②⑤⑦)のテストが揃っていることを確認
-- [ ] 品質ゲート、コミット・プッシュ
+- [x] `ShippingSlips`: `list_shipping_slips/2`・`summarize_ship_dates/1`・`cancel_shipping_slip/2` とテスト(各状態・解除失敗でローカルが変わらない・在庫側 `shipped` は拒否)
+- [x] `ShippingSlipLive.Index`(タブ・残件数・フィルタ・伝票行・引当ロット表示・エラー表示・ハイライト・`busy`・再引当・取消・数量変更リンク)
+- [x] `ShippingSlipLive.Components`(状態バッジ・ロット表示・エラー表示)
+- [x] `/` を作業画面へ redirect、`Layouts` のナビに「作業画面」「伝票登録」を追加し、`page_controller` のテストを更新
+- [x] LiveView のテスト(表示・フィルタ・`viewer` に操作が無い・イベント直接送信の拒否・取消の記録・再引当で復旧)
+- [x] 例外ケース(§6.11 ①②⑤⑦)のテストが揃っていることを確認
+- [x] 品質ゲート、コミット・プッシュ
+- 実装メモ: `/` は作業画面へ redirect し、ホーム画面(`PageHTML`)は削除した。`ShippingSlips.any_packed?/1`(追加伝票のハイライト判定)を追加。取消・再引当の結果は `{:slip_result, action, id, result}` で受け、伝票とタブの残件数を読み直す
 
 ## 5. 単位 E: 梱包完了(F-S4)
 

@@ -55,6 +55,30 @@ defmodule FoodShip.ShippingSlips do
     |> preload_slip()
   end
 
+  @doc """
+  `from_date` 以降の出荷予定日ごとの残件数(`pending` / `allocated` / `shortage` の合計)。
+
+  取消済み以外の伝票が 1 件でもある日付だけを、日付順に返す。作業画面のタブに使う。
+  """
+  def summarize_ship_dates(%Date{} = from_date) do
+    ShippingSlip
+    |> where([s], s.scheduled_ship_date >= ^from_date and s.status != :cancelled)
+    |> group_by([s], s.scheduled_ship_date)
+    |> order_by([s], asc: s.scheduled_ship_date)
+    |> select([s], %{
+      date: s.scheduled_ship_date,
+      remaining: filter(count(s.id), s.status in ^@unpacked)
+    })
+    |> Repo.all()
+  end
+
+  @doc "出荷予定日に梱包完了の伝票があるか。あれば、未梱包の伝票は追加伝票としてハイライトする。"
+  def any_packed?(%Date{} = date) do
+    Repo.exists?(
+      from s in ShippingSlip, where: s.scheduled_ship_date == ^date and s.status == :packed
+    )
+  end
+
   defp filter_status(query, :all), do: query
   defp filter_status(query, :unpacked), do: where(query, [s], s.status in ^@unpacked)
   defp filter_status(query, :shortage), do: where(query, [s], s.status == :shortage)
@@ -258,6 +282,43 @@ defmodule FoodShip.ShippingSlips do
 
         with {:ok, slip} <- apply_outcome(slip, attrs, :keep),
              do: {:ok, slip, Map.take(extra, [:errors])}
+    end
+  end
+
+  ## 取消
+
+  @doc """
+  梱包前の取消(functional-design §6.6)。`pending` / `shortage` / `allocated` のみ。
+
+  過去に在庫 API を呼んでいた(または在庫側にオーダーがある)場合は、在庫側を照会して引当済みの
+  オーダーを解除してから `cancelled`(`cancelled_at`・`cancelled_by_user_id`)にする。
+  解除に失敗したらローカルは変えず `{:error, reason}`(再度取消できる)。在庫側が出庫済みなら
+  `{:error, {:remote_state, :shipped}}`(梱包完了で状態を合わせる)。
+  """
+  def cancel_shipping_slip(scope, %ShippingSlip{id: id}) do
+    with :ok <- authorize(scope, :manage_shipping_slips),
+         {:ok, {slip, remote?}} <- claim(id, @unpacked, fn _slip -> %{} end),
+         :ok <- release_for_cancel(slip, remote?, scope.user.email) do
+      attrs = %{
+        status: :cancelled,
+        cancelled_at: DateTime.utc_now(:second),
+        cancelled_by_user_id: scope.user.id,
+        inventory_order_id: nil,
+        shortage_pieces: nil,
+        allocation_error: nil
+      }
+
+      apply_outcome(slip, attrs, {:replace, []})
+    end
+  end
+
+  defp release_for_cancel(_slip, false, _operator), do: :ok
+
+  defp release_for_cancel(slip, true, operator) do
+    case release_remote_orders(slip, operator, "発送システムで伝票を取り消したため") do
+      :ok -> :ok
+      {:shipped, _order} -> {:error, {:remote_state, :shipped}}
+      {:error, reason} -> {:error, reason}
     end
   end
 

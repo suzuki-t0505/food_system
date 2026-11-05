@@ -864,6 +864,242 @@ defmodule FoodShip.ShippingSlipsTest do
     end
   end
 
+  describe "cancel_shipping_slip/2" do
+    test "引当済みの伝票は、在庫側の引当を解除してから取消にする(実行者・日時を記録)" do
+      scope = staff_scope()
+      slip = allocated_slip(scope)
+      order = allocated_order(slip)
+
+      InventoryStub.routes([
+        route_list(respond_json(200, %{"shipment_orders" => [order]})),
+        route_cancel(respond_json(200, Map.put(order, "status", "cancelled")))
+      ])
+
+      assert {:ok, cancelled} = ShippingSlips.cancel_shipping_slip(scope, slip)
+
+      assert cancelled.status == :cancelled
+      assert cancelled.cancelled_by_user_id == scope.user.id
+      assert %DateTime{} = cancelled.cancelled_at
+      assert cancelled.inventory_order_id == nil
+      assert cancelled.allocated_lots == []
+
+      assert [
+               {"GET", @orders, nil},
+               {"POST", cancel_path, %{"operator" => operator, "reason" => _}}
+             ] = InventoryStub.calls()
+
+      assert cancel_path == "#{@orders}/#{@order_id}/cancel"
+      assert operator == scope.user.email
+    end
+
+    test "在庫 API を一度も呼んでいない pending の伝票は、API を呼ばずに取消にする" do
+      scope = staff_scope()
+      slip = slip_fixture(%{}, scope)
+
+      assert {:ok, %{status: :cancelled}} = ShippingSlips.cancel_shipping_slip(scope, slip)
+      assert InventoryStub.calls() == []
+    end
+
+    test "shortage の伝票は、照会して(解除するものが無ければ)取消にする" do
+      scope = staff_scope()
+      slip = slip_fixture(%{}, scope)
+
+      InventoryStub.routes([
+        route_allocate(fn conn ->
+          InventoryStub.error(conn, 422, "insufficient_stock", %{
+            "shortages" => [%{"item_id" => "x", "shortage_pieces" => 4}]
+          })
+        end)
+      ])
+
+      {:ok, shortage, _} = ShippingSlips.allocate_shipping_slip(scope, slip)
+      InventoryStub.calls()
+
+      InventoryStub.routes([route_list(respond_json(200, %{"shipment_orders" => []}))])
+
+      assert {:ok, %{status: :cancelled, shortage_pieces: nil}} =
+               ShippingSlips.cancel_shipping_slip(scope, shortage)
+
+      assert [{"GET", @orders, nil}] = InventoryStub.calls()
+    end
+
+    test "通信失敗で未解除のオーダーが残っている pending は、照会で見つけて解除してから取消にする" do
+      scope = staff_scope()
+      slip = slip_fixture(%{}, scope)
+      InventoryStub.routes([route_allocate(&InventoryStub.timeout/1)])
+      {:ok, pending, _} = ShippingSlips.allocate_shipping_slip(scope, slip)
+      InventoryStub.calls()
+
+      order = allocated_order(slip)
+
+      InventoryStub.routes([
+        route_list(respond_json(200, %{"shipment_orders" => [order]})),
+        route_cancel(respond_json(200, Map.put(order, "status", "cancelled")))
+      ])
+
+      assert {:ok, %{status: :cancelled}} = ShippingSlips.cancel_shipping_slip(scope, pending)
+      assert [{"GET", _, _}, {"POST", _, _}] = InventoryStub.calls()
+    end
+
+    test "解除に失敗したら、ローカルは変えず(引当済みのまま)エラーを返し、再度取消できる" do
+      scope = staff_scope()
+      slip = allocated_slip(scope)
+      order = allocated_order(slip)
+
+      InventoryStub.routes([
+        route_list(respond_json(200, %{"shipment_orders" => [order]})),
+        route_cancel(&InventoryStub.timeout/1)
+      ])
+
+      assert {:error, :connection} = ShippingSlips.cancel_shipping_slip(scope, slip)
+
+      row = slip_row(slip.id)
+      assert row.status == :allocated
+      assert row.inventory_order_id == @order_id
+      assert row.cancelled_at == nil
+      assert length(lots_of(slip.id)) == 2
+
+      # 復旧後にやり直せる
+      InventoryStub.routes([
+        route_list(respond_json(200, %{"shipment_orders" => [order]})),
+        route_cancel(respond_json(200, Map.put(order, "status", "cancelled")))
+      ])
+
+      assert {:ok, %{status: :cancelled}} =
+               ShippingSlips.cancel_shipping_slip(scope, slip_row(slip.id))
+    end
+
+    test "照会に失敗した場合も、ローカルは変えない" do
+      scope = staff_scope()
+      slip = allocated_slip(scope)
+
+      InventoryStub.routes([
+        route_list(fn conn -> InventoryStub.error(conn, 401, "unauthorized") end)
+      ])
+
+      assert {:error, :unauthorized} = ShippingSlips.cancel_shipping_slip(scope, slip)
+      assert slip_row(slip.id).status == :allocated
+    end
+
+    test "在庫側がすでに出庫済みなら取消できない(ローカルは変えない)" do
+      scope = staff_scope()
+      slip = allocated_slip(scope)
+      shipped = allocated_order(slip, %{status: "shipped", shipped_at: "2026-11-19T01:02:03Z"})
+
+      InventoryStub.routes([route_list(respond_json(200, %{"shipment_orders" => [shipped]}))])
+
+      assert {:error, {:remote_state, :shipped}} = ShippingSlips.cancel_shipping_slip(scope, slip)
+      assert slip_row(slip.id).status == :allocated
+    end
+
+    test "取消済みの伝票は、同じ発注元伝票番号で登録し直せる" do
+      scope = staff_scope()
+      client = client_fixture()
+      item = shipping_item_fixture()
+      attrs = %{client_id: client.id, shipping_item_id: item.id, client_slip_no: "PO-1"}
+      slip = slip_fixture(attrs, scope)
+
+      assert {:ok, %{status: :cancelled}} = ShippingSlips.cancel_shipping_slip(scope, slip)
+      assert slip_fixture(attrs, scope)
+    end
+
+    test "梱包済み・取消済みの伝票は取消できない(:invalid_status。API は呼ばない)" do
+      scope = staff_scope()
+      slip = slip_fixture(%{}, scope)
+      {:ok, cancelled} = ShippingSlips.cancel_shipping_slip(scope, slip)
+
+      assert {:error, :invalid_status} = ShippingSlips.cancel_shipping_slip(scope, cancelled)
+
+      other = slip_fixture(%{}, scope)
+
+      Repo.update_all(from(s in ShippingSlip, where: s.id == ^other.id),
+        set: [
+          status: :packed,
+          inventory_order_id: @order_id,
+          packed_at: DateTime.utc_now(:second),
+          packed_by_user_id: scope.user.id
+        ]
+      )
+
+      assert {:error, :invalid_status} = ShippingSlips.cancel_shipping_slip(scope, other)
+      assert InventoryStub.calls() == []
+    end
+
+    test "viewer は拒否する" do
+      slip = slip_fixture()
+
+      assert {:error, :forbidden} = ShippingSlips.cancel_shipping_slip(viewer_scope(), slip)
+      assert slip_row(slip.id).status == :pending
+    end
+  end
+
+  describe "summarize_ship_dates/1" do
+    test "出荷予定日ごとの残件数(pending・allocated・shortage)を日付順に返す" do
+      scope = staff_scope()
+      slip_fixture(%{scheduled_ship_date: ~D[2026-11-21]}, scope)
+      slip_fixture(%{scheduled_ship_date: ~D[2026-11-21]}, scope)
+      allocated_slip(scope, %{scheduled_ship_date: ~D[2026-11-20]})
+      slip_fixture(%{scheduled_ship_date: ~D[2026-11-10]}, scope)
+
+      assert [
+               %{date: ~D[2026-11-20], remaining: 1},
+               %{date: ~D[2026-11-21], remaining: 2}
+             ] = ShippingSlips.summarize_ship_dates(~D[2026-11-15])
+    end
+
+    test "梱包済みは残件数に数えず、取消済みだけの日付は出さない" do
+      scope = staff_scope()
+      packed = slip_fixture(%{scheduled_ship_date: ~D[2026-11-20]}, scope)
+      cancelled = slip_fixture(%{scheduled_ship_date: ~D[2026-11-22]}, scope)
+      {:ok, _} = ShippingSlips.cancel_shipping_slip(scope, cancelled)
+
+      Repo.update_all(from(s in ShippingSlip, where: s.id == ^packed.id),
+        set: [
+          status: :packed,
+          inventory_order_id: @order_id,
+          packed_at: DateTime.utc_now(:second),
+          packed_by_user_id: scope.user.id
+        ]
+      )
+
+      assert [%{date: ~D[2026-11-20], remaining: 0}] =
+               ShippingSlips.summarize_ship_dates(~D[2026-11-15])
+    end
+  end
+
+  describe "list_shipping_slips/2" do
+    test "出荷予定日の伝票を slip_no 順に返し、フィルタで絞れる" do
+      scope = staff_scope()
+      pending = slip_fixture(%{scheduled_ship_date: ~D[2026-11-20]}, scope)
+      allocated = allocated_slip(scope, %{scheduled_ship_date: ~D[2026-11-20]})
+      cancelled = slip_fixture(%{scheduled_ship_date: ~D[2026-11-20]}, scope)
+      {:ok, _} = ShippingSlips.cancel_shipping_slip(scope, cancelled)
+      other_day = slip_fixture(%{scheduled_ship_date: ~D[2026-11-21]}, scope)
+
+      ids = fn slips -> Enum.map(slips, & &1.id) end
+
+      assert ids.(ShippingSlips.list_shipping_slips(~D[2026-11-20])) ==
+               [pending.id, allocated.id, cancelled.id]
+
+      assert ids.(ShippingSlips.list_shipping_slips(~D[2026-11-20], :unpacked)) ==
+               [pending.id, allocated.id]
+
+      refute other_day.id in ids.(ShippingSlips.list_shipping_slips(~D[2026-11-20]))
+      assert ShippingSlips.list_shipping_slips(~D[2026-11-20], :shortage) == []
+    end
+
+    test "発注元・商品・引当ロットを preload する" do
+      scope = staff_scope()
+      slip = allocated_slip(scope, %{scheduled_ship_date: ~D[2026-11-20]})
+
+      assert [found] = ShippingSlips.list_shipping_slips(~D[2026-11-20])
+      assert found.id == slip.id
+      assert found.client.id == slip.client_id
+      assert found.shipping_item.id == slip.shipping_item_id
+      assert length(found.allocated_lots) == 2
+    end
+  end
+
   describe "get_shipping_slip!/1" do
     test "発注元・発送商品・引当ロット(期限日順)を preload して返す" do
       scope = staff_scope()

@@ -73,6 +73,14 @@ defmodule FoodShipWeb.Layouts do
       class="flex flex-wrap gap-1 px-4 sm:px-6 lg:px-8"
       id="main-nav"
     >
+      <.link navigate={~p"/shipping_slips"} class="btn btn-sm btn-ghost">作業画面</.link>
+      <.link
+        :if={FoodShip.Utils.Permission.can?(@current_scope.user, :manage_shipping_slips)}
+        navigate={~p"/shipping_slips/new"}
+        class="btn btn-sm btn-ghost"
+      >
+        伝票登録
+      </.link>
       <.link navigate={~p"/masters/clients"} class="btn btn-sm btn-ghost">発注元</.link>
       <.link navigate={~p"/masters/shipping_items"} class="btn btn-sm btn-ghost">発送商品</.link>
       <.link navigate={~p"/masters/expiration_rules"} class="btn btn-sm btn-ghost">
