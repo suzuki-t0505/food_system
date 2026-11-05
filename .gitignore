@@ -23,3 +23,11 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# --- Terraform(infra/terraform。.terraform.lock.hcl はコミットする) ---
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+backend.hcl
+crash.log

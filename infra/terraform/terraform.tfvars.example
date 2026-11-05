@@ -1,0 +1,23 @@
+# cp terraform.tfvars.example terraform.tfvars して値を書き換える(terraform.tfvars はコミットしない)
+project_id          = "your-project-id"
+region              = "asia-northeast1"
+domain              = "example.com" # vault.example.com / ship.example.com で公開する
+initial_admin_email = "admin@example.com"
+
+# Artifact Registry にプッシュしたイメージのタグ
+food_vault_image_tag = "v0.1.0"
+food_ship_image_tag  = "v0.1.0"
+
+# 開発環境用の小さめの設定
+db_tier             = "db-custom-1-3840"
+deletion_protection = true
+min_instances       = 0
+max_instances       = 2
+
+# 空なら全許可。指定するとこの CIDR 以外を Cloud Armor で 403 にする(最大 10 件)
+allowed_source_ranges = []
+
+rate_limit_per_minute = 600
+
+# 発送の対象倉庫 ID(段階 4 で使う。在庫側 GET /api/v1/warehouses で確認)
+inventory_warehouse_id = ""

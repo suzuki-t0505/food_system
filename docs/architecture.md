@@ -45,7 +45,33 @@ flowchart TB
 - 2 アプリは **別プロジェクト・別 DB・別コンテナ**。Erlang クラスタ・DB 共有はしない（各 `--sname` / `--cookie` も別）。
 - 発送 → 在庫の **一方向 HTTP のみ**。在庫システムから発送システムへの呼び出しは無い。
 - 開発時のホストポート: 在庫 4000、発送 4001（コンテナ内はどちらも 4000）。
-- 本番の Dockerfile・リリース手順・デプロイ先は現状リポジトリに無い（`Dockerfile.dev` のみ）。本番構成は別途定義する（[§16](#16-未決事項実装着手時の検証事項)）。本番では、リバースプロキシで TLS を終端し、在庫の `/api` を発送システムの送信元に限定する。
+- 本番（GCP）の構成は [§2.3](#23-gcp-構成)。
+
+### 2.3 GCP 構成
+
+`infra/terraform/` で定義する（手順は `infra/terraform/README.md`、設計は `.steering/20261105-gcp-terraform/design.md`）。リージョンは `asia-northeast1`。現時点の GCP 環境は開発環境用で、シードに開発用マスタを含める。
+
+```mermaid
+flowchart LR
+  U[利用者] -- "HTTPS vault.&lt;domain&gt; / ship.&lt;domain&gt;" --> LB[外部アプリケーション LB<br/>＋ Cloud Armor]
+  LB --> RV[Cloud Run: food-vault]
+  LB --> RS[Cloud Run: food-ship]
+  RS -- "VPC 経由（内部）/api/v1" --> RV
+  RV & RS --> SQL[(Cloud SQL PostgreSQL 15<br/>プライベート IP<br/>DB: food_vault / food_ship)]
+  JV[Cloud Run Job: food-vault-migrate] --> SQL
+  JS[Cloud Run Job: food-ship-migrate] --> SQL
+```
+
+| 項目 | 決定 |
+| :-- | :-- |
+| TLS 終端 | 外部アプリケーション LB（Google マネージド証明書）。HTTP は HTTPS へ 301。`force_ssl` は LB の `X-Forwarded-Proto` で満たす |
+| Cloud Run | アプリごとに 1 サービス。ingress は `internal-and-cloud-load-balancing`（`*.run.app` へ外部から直接届かない） |
+| 在庫 `/api` の送信元制限 | Cloud Armor で LB 経由の `/api` を 403。発送は egress を全トラフィック VPC 経由にし、在庫の `*.run.app` を内部トラフィックとして呼ぶ（`INVENTORY_API_BASE_URL`）。認証は従来どおりサービストークン |
+| Cloud Armor | `/api` 遮断、OWASP 事前構成ルール（感度 1）、IP ごとのレート制限、送信元 CIDR の許可リスト（任意） |
+| DB | Cloud SQL 1 インスタンスに DB・ユーザーをアプリごとに作る。プライベート IP のみ（Direct VPC egress で接続） |
+| マイグレーション・シード | アプリごとの Cloud Run Job が `{App}.Release.migrate_and_seed/0`（マイグレーション → `priv/repo/seeds.exs`。冪等）を実行する。デプロイは「イメージ更新 → `terraform apply` → Job 実行」 |
+| イメージ | `mix phx.gen.release --docker` で生成した各アプリの `Dockerfile`。Artifact Registry `food-system` に置く |
+
 
 ### 2.2 実行時の依存
 
@@ -239,7 +265,7 @@ end
 - 生成物から **自己登録・マジックリンク・メール確認・メール変更・配信（`UserNotifier`）・sudo mode を取り除き、パスワード認証のみ**にした（在庫・発送の両アプリ）。`users_tokens` は `session` コンテキストのみで、生成物の `sent_to`・`authenticated_at` は持たない。セッション有効期間は `inserted_at` ベースで、14 日（7 日経過で再発行）。「ログインしたままにする」（remember me、cookie 14 日）は `phx.gen.auth` の既定を残している。セッション cookie は署名のみで暗号化しない（中身はランダムなトークンのみで、失効は DB の行削除で行う）。
 - ユーザーは管理者が登録する。パスワードは bcrypt、最小 12 文字。ログイン失敗時のエラーは 1 種類（「メールアドレスまたはパスワードが正しくありません。」）。
 - パスワード再設定は管理者が行う運用（メール基盤は使わない）。再設定後は `must_change_password = true`。
-- 初期管理者は seeds（開発）／リリースタスク（本番）で作成する。初期パスワードは `runtime.exs` 経由の環境変数から読み、作成後に `must_change_password = true`。実装は `{App}.Accounts.ensure_initial_admin/0`（冪等。有効な `admin` がいれば何もしない）と、それを呼ぶ `{App}.Release.create_initial_admin/0`（本番イメージへの組み込みは §16 #3）、`seeds.exs`（`{App}.Release.run/0`）。設定キーは `config :{app}, {App}.Accounts.InitialAdmin`（開発は `admin@example.com` / `admin-password-dev` が既定。本番は環境変数が必須で、未設定ならタスクが報告して終了する）。
+- 初期管理者は seeds（開発）／リリースタスク（本番）で作成する。初期パスワードは `runtime.exs` 経由の環境変数から読み、作成後に `must_change_password = true`。実装は `{App}.Accounts.ensure_initial_admin/0`（冪等。有効な `admin` がいれば何もしない）と、それを呼ぶ `{App}.Release.create_initial_admin/0`、GCP の Cloud Run Job が呼ぶ `{App}.Release.migrate_and_seed/0`（§2.3）、`seeds.exs`（`{App}.Release.run/0`）。設定キーは `config :{app}, {App}.Accounts.InitialAdmin`（開発は `admin@example.com` / `admin-password-dev` が既定。本番は環境変数が必須で、未設定ならタスクが報告して終了する）。
 - スキーマには `@derive {Inspect, only: [...]}` を付け、`password` / `current_password` は `virtual: true, redact: true`、`hashed_password` は `redact: true`（coding-rules §5.4）。
 
 ### 8.2 `current_scope`
@@ -312,6 +338,8 @@ end
 - 秘密情報（トークン・DB パスワード・初期管理者パスワード）は **コンパイル時 config（`config.exs` / `dev.exs` / `prod.exs`）に置かず `runtime.exs`** に置く。開発用のデフォルトは「環境変数 || 開発用デフォルト」で書く。
 - 必須値は `System.get_env("X") || raise "..."` で **起動時に落とす**。任意値は `System.get_env("X", "default")`。
 - `System.get_env` をアプリケーションコードから直接呼ばない。設定はモジュール名をキーに `runtime.exs` に集約し、利用側は **関数経由**で解決する（`Application.get_env(:app, __MODULE__)`）。モジュール属性（`@x Application.get_env(...)`）で読まない（コンパイル時に固定されるため）。
+
+- GCP では、秘密情報（`DATABASE_URL`・`SECRET_KEY_BASE`・`INITIAL_ADMIN_PASSWORD`・在庫 API トークン）を Terraform が生成して Secret Manager に置き、Cloud Run の環境変数として参照する（§2.3）。
 
 環境変数（名前は命名案。実装時に確定）:
 
@@ -411,7 +439,7 @@ end
 | :-- | :-- | :-- |
 | 1 | ULID 依存の採否 | **解決済み**: `ecto_ulid_next` を採用（§4） |
 | 2 | `phx.gen.auth` 生成物の削減範囲 | **解決済み**: 実生成して確認し、§8.1 のとおり削減した。セッション有効期間は `inserted_at` ベースで設計と一致。ULID 化は schema を `use {App}.Schema` に替え、migration を `:binary_id` の主キー・FK にする |
-| 3 | 本番の構成 | 本番 Dockerfile・リリース・デプロイ先・リバースプロキシ（TLS、`/api` の送信元制限）・Chromium の本番構成が未定 |
+| 3 | 本番の構成 | **一部解決**: デプロイ先を GCP（LB ＋ Cloud Armor ＋ Cloud Run ＋ Cloud Run Job ＋ Cloud SQL）とし、TLS 終端と `/api` の送信元制限を §2.3 のとおり Terraform で定義した。リリースタスク（`migrate` / `migrate_and_seed`）を追加。未決: Chromium の本番構成、`X-Forwarded-For` からの送信元 IP（§12）、CI/CD、監視 |
 | 4 | PDF のライブラリ最終決定 | `ChromicPDF` を前提に、環境構築セッションで確定。サンドボックス、プール数、タイムアウト |
 | 5 | 品質ゲートの整備 | **解決済み**: `check`、`credo`、`.credo.exs`、PR ワークフローを整備（§14）。CI の実行は PR を出して初めて確認できる |
 | 6 | 環境変数の命名の確定 | **一部解決**: `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` を確定し `runtime.exs` に反映済み（段階 1）。在庫 API 関連は、在庫側の `INVENTORY_API_TOKENS` を段階 3 で確定・反映済み（`runtime.exs`。dev は既定値あり、本番は必須）。発送側の `INVENTORY_API_*` は段階 4 |

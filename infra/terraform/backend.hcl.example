@@ -1,0 +1,3 @@
+# cp backend.hcl.example backend.hcl して値を書き換える(backend.hcl はコミットしない)
+bucket = "your-project-id-tfstate"
+prefix = "food-system"
