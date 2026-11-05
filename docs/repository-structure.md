@@ -96,7 +96,7 @@ food_vault/
 ├── AGENTS.md                  # Phoenix 1.8 / LiveView 等の AI 向けガイド（current_scope の扱いを含む）［現状］
 ├── README.md                  # ［現状］
 ├── mix.exs / mix.lock         # 依存・エイリアス（setup / test / precommit など）［現状］
-├── Dockerfile / .dockerignore # 本番イメージ（`mix phx.gen.release --docker` で生成）［計画］
+├── Dockerfile / .dockerignore # 本番イメージ（`mix phx.gen.release --docker` で生成）［現状］
 ├── rel/overlays/bin/          # リリースの起動スクリプト server / migrate（`mix phx.gen.release` で生成）［現状］
 ├── assets/                    # JS / CSS / vendor（Tailwind・daisyUI・heroicons）［現状］
 ├── config/                    # config / dev / prod / runtime / test ［現状］

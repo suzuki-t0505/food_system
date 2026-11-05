@@ -5,14 +5,16 @@
 
 ## 1. アプリ側(リリース)
 
-- [ ] 1.1 `food_vault` で `mix phx.gen.release --docker` を実行(`release.ex` は上書きしない)
-  - `rel/overlays/bin/` は生成済み。Dockerfile の生成は bob.hex.pm への通信がネットワーク方針で拒否され未完(許可後に再実行)
-- [ ] 1.2 `food_ship` で `mix phx.gen.release --docker` を実行(同上。状況も同じ)
-- [ ] 1.3 生成された `Dockerfile` のベースイメージ(Elixir 1.20.5 / OTP 29)を確認・修正
+- [x] 1.1 `food_vault` で `mix phx.gen.release --docker` を実行(`release.ex` は上書きしない)
+  - 初回は bob.hex.pm への通信が拒否され `rel/` のみ生成。許可後に再実行して `Dockerfile`・`.dockerignore` を生成
+- [x] 1.2 `food_ship` で `mix phx.gen.release --docker` を実行(同上)
+- [x] 1.3 生成された `Dockerfile` のベースイメージを確認(Elixir 1.20.5 / OTP 29.1.2 / Debian trixie。修正不要)
 - [x] 1.4 `FoodVault.Release` に `migrate/0`・`rollback/2`(生成物から取り込み)と `migrate_and_seed/0` を追加
 - [x] 1.5 `FoodShip.Release` に同じものを追加
 - [x] 1.6 両アプリで compile(`--warnings-as-errors`)・format・credo・test を通す(`make check`。在庫 447・発送 150 件パス)。`mix run --no-start` で `migrate_and_seed/0` を 2 回実行し冪等を確認
-- [ ] 1.7 本番イメージの `docker build` が通ることを確認(環境で可能な範囲)
+- [x] 1.7 本番イメージの `docker build` が通ることを確認(環境で可能な範囲)
+  - 両アプリともビルド成功。Job と同じ `bin/<app> eval "<App>.Release.migrate_and_seed()"` で新規 DB にマイグレーション → シード(在庫: メーカー 2・倉庫 2・商品 3・管理者 1)、再実行で重複なし
+  - サーバー起動: ログイン画面・アセット・在庫 API(Bearer)が 200、実行ユーザーは `nobody`。この検証環境は IPv6 が無く `::` で待ち受けできないため、確認時のみ IPv4 にした `runtime.exs` をマウントした(Cloud Run は第 2 世代の実行環境を指定)
 
 ## 2. Terraform(`infra/terraform/`)
 
@@ -34,4 +36,4 @@
 
 - [x] 3.1 `architecture.md`(§2.1 本番構成、§11 Secret Manager、§16 #3 解決)
 - [x] 3.2 `repository-structure.md`(`infra/terraform/`・`Dockerfile`・`rel/`)
-- [ ] 3.3 本タスクリストの完了反映・コミット・プッシュ
+- [x] 3.3 本タスクリストの完了反映・コミット・プッシュ
