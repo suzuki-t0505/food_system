@@ -736,7 +736,10 @@ defmodule FoodShip.ShippingSlipsTest do
 
       assert {:error, :connection} = ShippingSlips.allocate_shipping_slip(scope, slip)
 
-      assert [{"GET", "/api/v1/warehouses", nil}] = InventoryStub.calls()
+      # 通信失敗はリトライされるので、倉庫の取得は複数回呼ばれる。引当(POST)は呼ばれない
+      calls = InventoryStub.calls()
+      assert calls != []
+      assert Enum.all?(calls, &match?({"GET", "/api/v1/warehouses", nil}, &1))
       assert slip_row(slip.id).allocation_attempted_at == nil
     end
 
