@@ -9,7 +9,7 @@
 flowchart LR
   U[利用者] -- "HTTPS vault.&lt;domain&gt; / ship.&lt;domain&gt;" --> LB
   subgraph G[グローバル]
-    LB[外部アプリケーション LB<br/>静的 IP・マネージド証明書<br/>HTTP→HTTPS リダイレクト]
+    LB[外部アプリケーション LB<br/>静的 IP・マネージド証明書]
     CA[Cloud Armor ポリシー]
   end
   LB -. 付与 .- CA
@@ -77,7 +77,7 @@ infra/terraform/
 | `domain` | — | 独自ドメイン。ホスト名は `vault.<domain>` / `ship.<domain>` |
 | `food_vault_image_tag` / `food_ship_image_tag` | — | イメージのタグ(イメージは `<region>-docker.pkg.dev/<project>/food-system/<app>:<tag>`) |
 | `initial_admin_email` | — | 初期管理者のメール(両アプリ共通) |
-| `db_tier` | `db-custom-1-3840` | Cloud SQL のマシン |
+| `db_tier` | `db-f1-micro`(当初 `db-custom-1-3840`。20261108-reduce-gcp-cost で変更) | Cloud SQL のマシン |
 | `deletion_protection` | `true` | Cloud SQL の削除保護 |
 | `min_instances` / `max_instances` | `0` / `2` | Cloud Run のスケール |
 | `allowed_source_ranges` | `[]` | 空なら全許可。指定するとその CIDR 以外を Cloud Armor で拒否 |
@@ -138,7 +138,7 @@ infra/terraform/
 - `google_compute_global_address`、`google_compute_managed_ssl_certificate`(`vault.<domain>`・`ship.<domain>`)
 - アプリごとに `google_compute_region_network_endpoint_group`(`SERVERLESS`)＋ `google_compute_backend_service`(`EXTERNAL_MANAGED`、`security_policy` 付与、ログ有効)
 - URL マップ: ホストルールで振り分け。既定(どのホストにも一致しない。IP 直打ちなど)は在庫のホストへ 301 リダイレクト(URL マップは既定の転送先が必須のため)
-- HTTPS プロキシ＋転送ルール(443)、HTTP は別 URL マップで HTTPS へ 301 リダイレクト(80)
+- HTTPS プロキシ＋転送ルール(443)、HTTP(80)は待ち受けない(20261108-reduce-gcp-cost で削除)
 - 証明書の発行には DNS の A レコード(出力の IP)登録が必要(利用者が設定)
 
 ### 4.7 Cloud Armor(`armor.tf`、両バックエンド共通の 1 ポリシー)
