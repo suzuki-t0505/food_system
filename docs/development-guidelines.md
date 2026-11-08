@@ -96,7 +96,7 @@ docker compose up -d
 3. `mix credo --all` が通る
 4. `mix test` が通る
 
-CI でも同じ内容を回す（PR のみ。`.github/workflows/ci.yml`、[architecture §14](architecture.md#14-開発環境品質ゲートci)）。失敗したままプッシュしない。
+CI でも同じ内容を回す（PR のみ。`.github/workflows/ci.yml`。マージ先の検査は `branch-policy.yml`、[architecture §14](architecture.md#14-開発環境品質ゲートci)）。失敗したままプッシュしない。
 
 ---
 
@@ -104,6 +104,11 @@ CI でも同じ内容を回す（PR のみ。`.github/workflows/ci.yml`、[archi
 
 ### 3.1 ブランチ
 
+- **PR のマージ先のルール**（誤って `main` にマージした反省から定めた）:
+  - **`main` へマージできるのは、このリポジトリの `dev` ブランチからの PR だけ**。
+  - **それ以外のブランチ（`feature/…`・`fix/…`・`docs/…`・`claude/…` など）は、`dev` へだけマージする**。PR を作るときのマージ先（base）は必ず `dev`。`main` を base にしない。
+  - revert も同じ。`main` から外したいときは、`dev` 側で revert して `dev` → `main` の PR にする。
+  - 強制: `.github/workflows/branch-policy.yml`（`branch policy` ジョブ）が、PR の base と head の組み合わせを検査する。ジョブを必須にするには、GitHub の Settings > Branches で `main` と `dev` に「Require status checks to pass before merging」を設定する（リポジトリ管理者の設定）。
 - `main` は常にデプロイ可能（テストが通る）状態に保ち、直接コミットしない。
 - 作業ブランチは用途別の接頭辞を付ける: `feature/{要件ID}-{内容}`（例：`feature/f-v2-inventory-receipt`）、`fix/{内容}`、`docs/{内容}`。自動化ツールが指定するブランチ名（例：`claude/...`）がある場合はそれに従う。
 - 1 つのブランチに複数の無関係な変更を混ぜない。
@@ -122,7 +127,7 @@ CI でも同じ内容を回す（PR のみ。`.github/workflows/ci.yml`、[archi
 
 ### 3.3 プルリクエスト
 
-- 概要に「何を・なぜ」「対応する要件 ID／`.steering/` のパス」「検証内容（テスト結果・動作確認）」「影響範囲（DB 変更・API 変更）」を書く。
+- **マージ先（base）は `dev`**（`main` へは `dev` からの PR だけ。§3.1）。概要に「何を・なぜ」「対応する要件 ID／`.steering/` のパス」「検証内容（テスト結果・動作確認）」「影響範囲（DB 変更・API 変更）」を書く。
 - 次を満たしてから出す: 品質ゲート通過、tasklist の更新、必要なドキュメント更新（§8）。
 - **DB スキーマ・API・権限の変更を含む PR は、両アプリへの影響（連携 API の契約）をレビュー観点に含める**（§7）。
 
