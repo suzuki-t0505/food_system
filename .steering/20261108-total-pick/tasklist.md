@@ -38,11 +38,12 @@
 
 ## 3. 単位 C: 伝票の変更との連動
 
-- [ ] `ShippingSlips.update_shipping_slip/3` で、紐づき済みなら外して `TotalPicks.release/2`（同一トランザクション）
-- [ ] `ShippingSlips.cancel_shipping_slip/2`（`apply_outcome` に取消用の分岐）で、紐づき済みなら外して `release`
-- [ ] `list_shipping_slips/2` に `:unpicked` フィルタを追加
-- [ ] `ShippingSlips` のテスト（数量変更・出荷予定日変更・取消でピックが `outdated`／`cancelled`、梱包完了では変わらない、`stale` のときピックも変わらない）
-- [ ] 品質ゲート、コミット・プッシュ
+- [x] `ShippingSlips.update_shipping_slip/3` で、紐づき済みなら外して `TotalPicks.release/2`（同一トランザクション）
+- [x] `ShippingSlips.cancel_shipping_slip/2`（`apply_outcome` に取消用の分岐）で、紐づき済みなら外して `release`
+- [x] `list_shipping_slips/2` に `:unpicked` フィルタを追加
+- [x] `ShippingSlips` のテスト（数量変更・出荷予定日変更・取消でピックが `outdated`／`cancelled`、梱包完了では変わらない、`stale` のときピックも変わらない）
+- [x] 品質ゲート、コミット・プッシュ
+- 実装メモ: 取消では `apply_outcome/3` の Multi に「伝票を `FOR UPDATE` で読み直して今の `total_pick_id` を控える → 更新 → `TotalPicks.release/2`」を足した。API 呼び出しの最中（確保のあと）にピックへ紐づけられても外れる（テストで再現）。`preload_slip` に `:total_pick` を追加した
 
 ## 4. 単位 D: 画面
 

@@ -7,6 +7,7 @@ defmodule FoodShip.TotalPicksConcurrencyTest do
   import FoodShip.TotalPicksFixtures
 
   alias FoodShip.Repo
+  alias FoodShip.ShippingSlips
   alias FoodShip.ShippingSlips.ShippingSlip
   alias FoodShip.TotalPicks
   alias FoodShip.TotalPicks.TotalPick
@@ -53,6 +54,30 @@ defmodule FoodShip.TotalPicksConcurrencyTest do
     assert Repo.get!(TotalPick, pick.id).status == :cancelled
 
     for slip <- slips do
+      assert Repo.get!(ShippingSlip, slip.id).total_pick_id == nil
+    end
+  end
+
+  test "ピックの取消と伝票の数量変更を同時に実行しても、デッドロックせず整合する" do
+    scope = user_scope_fixture()
+    {pick, [slip1, slip2]} = total_pick_fixture(scope: scope)
+
+    results =
+      concurrently(3, fn
+        1 -> TotalPicks.cancel_total_pick(scope, pick)
+        2 -> ShippingSlips.update_shipping_slip(scope, slip1, %{"order_count" => "4"})
+        3 -> ShippingSlips.update_shipping_slip(scope, slip2, %{"order_count" => "5"})
+      end)
+
+    # 取消は、先に伝票の変更でピックが自動で cancelled になっていれば :invalid_status
+    [cancel_result | update_results] = results
+    assert match?({:ok, _}, cancel_result) or cancel_result == {:error, :invalid_status}
+    assert Enum.all?(update_results, &match?({:ok, _}, &1))
+
+    # どの順で進んでも、最終的にピックは cancelled で、伝票はピックから外れている
+    assert Repo.get!(TotalPick, pick.id).status == :cancelled
+
+    for slip <- [slip1, slip2] do
       assert Repo.get!(ShippingSlip, slip.id).total_pick_id == nil
     end
   end
