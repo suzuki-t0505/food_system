@@ -80,7 +80,8 @@ gcloud secrets versions access latest --secret food-ship-initial-admin-password 
 | 在庫 API | Cloud Armor で `/api` を外部から遮断。発送は egress を全トラフィック VPC 経由にし、在庫の `*.run.app` を内部トラフィックとして呼ぶ(`INVENTORY_API_BASE_URL`)。認証は Bearer トークン(Secret Manager `inventory-api-token`) |
 | 発送の対象倉庫 | `inventory_warehouse_id` は初回は空のままでよい(発送は空でも起動するが、設定するまで伝票登録・再引当・数量変更を拒否し、画面に警告を出す)。在庫を構築・初期管理者でマスタ(倉庫)を作ったあと、在庫 API(`GET /api/v1/warehouses`、Bearer トークン)で倉庫の ID を確認し、`terraform.tfvars` に設定して `apply` する |
 | 発送のインターネット接続 | egress が全トラフィック VPC のため、外部へは出られない。必要になったら Cloud NAT を追加する |
-| Cloud SQL | プライベート IP のみ。1 インスタンスに DB `food_vault` / `food_ship`(ユーザーも別) |
+| Cloud SQL | プライベート IP のみ。1 インスタンスに DB `food_vault` / `food_ship`(ユーザーも別)。既定は共有コア最小の `db-f1-micro`(SLA 対象外・接続数が少ない。不足したら `db_tier` を `db-g1-small` などへ。変更時は再起動が入る) |
+| HTTP(80) | 待ち受けない(コスト削減)。必ず `https://` で開く |
 | 秘密情報 | `DATABASE_URL`・`SECRET_KEY_BASE`・初期管理者パスワード・在庫 API トークンを Terraform が生成し Secret Manager に置く |
 | Cloud Armor | `/api` 遮断 → OWASP 事前構成ルール(感度 1)→ IP ごとのレート制限(`rate_limit_per_minute`)→ 既定。`allowed_source_ranges` を指定するとそれ以外を 403 |
 

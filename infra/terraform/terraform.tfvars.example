@@ -9,7 +9,7 @@ food_vault_image_tag = "v0.1.0"
 food_ship_image_tag  = "v0.1.0"
 
 # 開発環境用の小さめの設定
-db_tier             = "db-custom-1-3840"
+db_tier             = "db-f1-micro" # 共有コアの最小。不足したら "db-g1-small" や "db-custom-1-3840"
 deletion_protection = true
 min_instances       = 0
 max_instances       = 2

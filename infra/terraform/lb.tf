@@ -1,4 +1,4 @@
-# グローバル外部アプリケーション LB(TLS 終端・ホスト名で振り分け・HTTP→HTTPS リダイレクト)
+# グローバル外部アプリケーション LB(TLS 終端・ホスト名で振り分け。HTTP(80)は待ち受けない)
 
 locals {
   backends = {
@@ -97,26 +97,4 @@ resource "google_compute_global_forwarding_rule" "https" {
   target                = google_compute_target_https_proxy.this.id
 }
 
-# HTTP は HTTPS へ 301
-resource "google_compute_url_map" "http_redirect" {
-  name = "food-system-http-redirect"
-
-  default_url_redirect {
-    https_redirect         = true
-    redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
-    strip_query            = false
-  }
-}
-
-resource "google_compute_target_http_proxy" "this" {
-  name    = "food-system-http"
-  url_map = google_compute_url_map.http_redirect.id
-}
-
-resource "google_compute_global_forwarding_rule" "http" {
-  name                  = "food-system-http"
-  load_balancing_scheme = "EXTERNAL_MANAGED"
-  ip_address            = google_compute_global_address.lb.id
-  port_range            = "80"
-  target                = google_compute_target_http_proxy.this.id
-}
+# コスト削減のため HTTP(80)は待ち受けない(http:// では接続できない)
