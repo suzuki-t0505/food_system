@@ -11,6 +11,12 @@ locals {
   }
 
   restrict_source = length(var.allowed_source_ranges) > 0
+
+  # "/api" の各文字を平文かパーセントエンコード(%61 %70 %69)で書いた全組み合わせ × 終端("/" か末尾)。
+  # Cloud Armor の正規表現はキャプチャグループを使えないため、グループ化せずトップレベルの "|" で並べる
+  api_path_regex = join("|", [
+    for c in setproduct(["a", "%61"], ["p", "%70"], ["i", "%69"], ["/", "$"]) : "^/+${join("", c)}"
+  ])
 }
 
 resource "google_compute_security_policy" "this" {
@@ -20,6 +26,8 @@ resource "google_compute_security_policy" "this" {
 
   # 在庫 API は外部から使わせない(発送からは VPC 経由で *.run.app を直接呼ぶ)。
   # Plug は空のパス要素を無視し、パス要素を URL デコードするため、"//api" や "%61pi" も対象にする
+  # (Cloud Armor の式には urlDecode() の関数形式が無く、正規表現にキャプチャグループも使えないため、
+  #  a/p/i のパーセントエンコードを local.api_path_regex で全組み合わせ列挙する)
   rule {
     priority    = 100
     action      = "deny(403)"
@@ -27,7 +35,7 @@ resource "google_compute_security_policy" "this" {
 
     match {
       expr {
-        expression = "urlDecode(request.path).lower().matches('^/+api(/|$)')"
+        expression = "request.path.lower().matches('${local.api_path_regex}')"
       }
     }
   }

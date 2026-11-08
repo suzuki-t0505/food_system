@@ -145,7 +145,7 @@ infra/terraform/
 
 | 優先度 | 条件 | 動作 |
 | :-- | :-- | :-- |
-| 100 | `urlDecode(request.path).lower().matches('^/+api(/|$)')` | deny(403)。在庫 API を外部から遮断(発送には `/api` が無いので共通で問題ない)。Plug は空のパス要素を無視し、要素を URL デコードするため `//api`・`%61pi` も対象にする |
+| 100 | `request.path.lower().matches(local.api_path_regex)` | deny(403)。在庫 API を外部から遮断(発送には `/api` が無いので共通で問題ない)。Plug は空のパス要素を無視し、要素を URL デコードするため `//api`・`%61pi` も対象にする。Cloud Armor の式には `urlDecode()` の関数形式が無く、正規表現にキャプチャグループも使えないため、`a`/`p`/`i` の平文とパーセントエンコードの全組み合わせ × 終端(`/` か末尾)の 16 通りを `^/+api/`・`^/+%61pi$` などの形で のトップレベル `\|` で並べて生成する |
 | 1000 | `sqli-v33-stable`(感度 1) | deny(403) |
 | 1001 | `xss-v33-stable`(感度 1) | deny(403) |
 | 1002〜 | `lfi` / `rfi` / `rce` / `scannerdetection` / `protocolattack` の `v33-stable`(感度 1) | deny(403) |
