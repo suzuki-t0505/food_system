@@ -54,14 +54,14 @@ gcloud run jobs execute food-ship-migrate  --project ${PROJECT_ID} --region ${RE
 # 7. DNS に A レコードを 2 つ登録する(vault.<domain> / ship.<domain> → この IP)
 terraform output lb_ip_address
 # 証明書が ACTIVE になるまで待つ(数十分〜)
-gcloud compute ssl-certificates describe food-system --global --format='value(managed.status,managed.domainStatus)'
+gcloud compute ssl-certificates describe food-system --global --project ${PROJECT_ID} --format='value(managed.status,managed.domainStatus)'
 ```
 
 初期管理者のパスワード(初回ログイン時に変更を求められる):
 
 ```bash
-gcloud secrets versions access latest --secret food-vault-initial-admin-password
-gcloud secrets versions access latest --secret food-ship-initial-admin-password
+gcloud secrets versions access latest --secret food-vault-initial-admin-password --project ${PROJECT_ID}
+gcloud secrets versions access latest --secret food-ship-initial-admin-password --project ${PROJECT_ID}
 ```
 
 ## 更新(デプロイ)
