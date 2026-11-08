@@ -86,7 +86,10 @@ defmodule FoodShip.ShippingSlips.ShippingSlip do
   @doc "伝票番号の表示(`S-000123`)。"
   def slip_no_label(%__MODULE__{slip_no: nil}), do: ""
 
-  def slip_no_label(%__MODULE__{slip_no: slip_no}),
+  def slip_no_label(%__MODULE__{slip_no: slip_no}), do: format_slip_no(slip_no)
+
+  @doc "伝票番号（整数）の表示（`S-000123`）。集計結果など、構造体を持たない場面で使う。"
+  def format_slip_no(slip_no) when is_integer(slip_no),
     do: "S-" <> String.pad_leading(Integer.to_string(slip_no), 6, "0")
 
   @doc "一時エラー(再試行で直る)か。恒久エラーは設定・マスタ・内容の修正が必要。"

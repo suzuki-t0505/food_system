@@ -1,0 +1,84 @@
+<section class="page" id="pick-sheet">
+  <h1>トータルピック表 {pick_no(@pick)}（第{@pick.revision}版）</h1>
+
+  <table class="meta">
+    <tbody>
+      <tr>
+        <th>出荷予定日</th>
+        <td>{@pick.scheduled_ship_date}</td>
+        <th>発行日時</th>
+        <td>{datetime(@pick.issued_at)}</td>
+      </tr>
+      <tr>
+        <th>発注元</th>
+        <td>{@pick.client.client_name}</td>
+        <th>発行者</th>
+        <td>{@pick.issued_by_user.email}</td>
+      </tr>
+      <tr>
+        <th>メーカー</th>
+        <td colspan="3">{@pick.maker_name}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <table id="pick-lines">
+    <thead>
+      <tr>
+        <th>商品コード</th>
+        <th>商品名</th>
+        <th>期限日</th>
+        <th class="num">バラ数</th>
+        <th class="num">件数</th>
+        <th class="num">箱数</th>
+        <th class="check">確認</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr :for={line <- @summary.lines}>
+        <td>{line.item_code}</td>
+        <td>{line.item_name}</td>
+        <td class="num">{expiration(line.expiration_date)}</td>
+        <td class="num">{line.pieces}</td>
+        <td class="num">{line.order_count}</td>
+        <td class="num">{line.box_count}</td>
+        <td></td>
+      </tr>
+      <tr class="total">
+        <td colspan="3">合計</td>
+        <td class="num">{@summary.totals.pieces}</td>
+        <td class="num">{@summary.totals.order_count}</td>
+        <td class="num">{@summary.totals.box_count}</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="page" id="sorting-sheet">
+  <h1>仕分け表 {pick_no(@pick)}（第{@pick.revision}版）</h1>
+  <p class="small">{@pick.scheduled_ship_date}{@pick.client.client_name}{@pick.maker_name}</p>
+
+  <table id="sorting-lines">
+    <thead>
+      <tr>
+        <th>商品</th>
+        <th>期限日</th>
+        <th class="num">バラ数</th>
+        <th>仕分け（伝票番号 × 数量）</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr :for={line <- @summary.lines}>
+        <td>{line.item_code} {line.item_name}</td>
+        <td class="num">{expiration(line.expiration_date)}</td>
+        <td class="num">{line.pieces}</td>
+        <td>
+          <span :for={entry <- line.slips} style="display: inline-block; margin-right: 8pt;">
+            {slip_no_text(entry.slip_no)} × {entry.pieces}
+          </span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</section>

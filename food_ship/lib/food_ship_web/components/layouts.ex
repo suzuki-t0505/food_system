@@ -81,6 +81,7 @@ defmodule FoodShipWeb.Layouts do
       >
         伝票登録
       </.link>
+      <.link navigate={~p"/total_picks"} class="btn btn-sm btn-ghost">トータルピック</.link>
       <.link navigate={~p"/masters/clients"} class="btn btn-sm btn-ghost">発注元</.link>
       <.link navigate={~p"/masters/shipping_items"} class="btn btn-sm btn-ghost">発送商品</.link>
       <.link navigate={~p"/masters/expiration_rules"} class="btn btn-sm btn-ghost">

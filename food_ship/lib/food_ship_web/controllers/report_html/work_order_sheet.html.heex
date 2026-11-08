@@ -1,0 +1,72 @@
+<section class="page work-order">
+  <h1>作業指示書 {slip_no(@slip)}</h1>
+
+  <table class="meta">
+    <tbody>
+      <tr>
+        <th>出荷予定日</th>
+        <td>{@slip.scheduled_ship_date}</td>
+        <th>トータルピック</th>
+        <td>{(@pick && pick_no(@pick)) || "なし"}</td>
+      </tr>
+      <tr>
+        <th>発注元</th>
+        <td>{@slip.client.client_name}</td>
+        <th>発注元伝票番号</th>
+        <td>{@slip.client_slip_no || "なし"}</td>
+      </tr>
+      <tr>
+        <th>メーカー</th>
+        <td colspan="3">{@slip.shipping_item.maker_name}</td>
+      </tr>
+      <tr>
+        <th>商品</th>
+        <td colspan="3">{@slip.shipping_item.item_code} {@slip.shipping_item.item_name}</td>
+      </tr>
+      <tr>
+        <th>件数</th>
+        <td>{@slip.order_count}</td>
+        <th>箱数</th>
+        <td>{@slip.box_count}</td>
+      </tr>
+      <tr>
+        <th>出庫数量（バラ）</th>
+        <td>{@slip.total_piece_qty}</td>
+        <th>最低許容期限日</th>
+        <td>{@slip.min_expiration_date || "なし"}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>ピッキング（期限日 × 個数）</h2>
+  <table class="lots">
+    <thead>
+      <tr>
+        <th>期限日</th>
+        <th class="num">個数</th>
+        <th class="check">確認</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr :for={lot <- @slip.allocated_lots}>
+        <td>{expiration(lot.expiration_date)}</td>
+        <td class="num">{lot.allocated_pieces}</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>実績</h2>
+  <table class="write-in-table">
+    <tbody>
+      <tr>
+        <th>実際の箱数</th>
+        <td class="write-in"></td>
+        <th>担当者</th>
+        <td class="write-in"></td>
+        <th>検品</th>
+        <td class="write-in"></td>
+      </tr>
+    </tbody>
+  </table>
+</section>

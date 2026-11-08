@@ -419,7 +419,11 @@ defmodule FoodShip.TotalPicks do
 
     Repo.preload(
       pick,
-      [:client, :issued_by_user, shipping_slips: {slips, [:shipping_item, allocated_lots: lots]}],
+      [
+        :client,
+        :issued_by_user,
+        shipping_slips: {slips, [:shipping_item, :client, allocated_lots: lots]}
+      ],
       force: true
     )
   end

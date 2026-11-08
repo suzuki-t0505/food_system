@@ -47,22 +47,25 @@
 
 ## 4. 単位 D: 画面
 
-- [ ] `pagination` コンポーネントを `SlipComponents` に移植（在庫側からコピー）
-- [ ] `TotalPickLive.Index`（絞り込み・ページ送り）・`TotalPickLive.Show`（ヘッダ・明細・仕分け・伝票一覧・再発行・取消）とテスト
-- [ ] `ShippingSlipLive.Index`: ピック番号列・「未ピックのみ」・作業指示書リンク・「トータルピック作成」ダイアログ
-- [ ] 取消・数量変更の確認ダイアログに「トータルピック TP-xxxxxx から外れ、再発行が必要になります」を追記（`Index`・`Form`）
-- [ ] `router.ex`（一覧・詳細）、`Layouts` のナビに「トータルピック」
-- [ ] LiveView のテスト（表示と DB の両方、`viewer` に操作が出ない、イベント直接送信の拒否、ダイアログでの作成、対象が変わったときの警告）
-- [ ] `OperationLog`（作成・再発行・取消の成功のみ）
-- [ ] 品質ゲート、コミット・プッシュ
+- [x] `pagination` コンポーネントを `SlipComponents` に移植（在庫側からコピー）
+- [x] `TotalPickLive.Index`（絞り込み・ページ送り）・`TotalPickLive.Show`（ヘッダ・明細・仕分け・伝票一覧・再発行・取消）とテスト
+- [x] `ShippingSlipLive.Index`: ピック番号列・「未ピックのみ」・作業指示書リンク・「トータルピック作成」ダイアログ
+- [x] 取消・数量変更の確認ダイアログに「トータルピック TP-xxxxxx から外れ、再発行が必要になります」を追記（`Index`・`Form`）
+- [x] `router.ex`（一覧・詳細）、`Layouts` のナビに「トータルピック」
+- [x] LiveView のテスト（表示と DB の両方、`viewer` に操作が出ない、イベント直接送信の拒否、ダイアログでの作成、対象が変わったときの警告）
+- [x] `OperationLog`（作成・再発行・取消の成功のみ）
+- [x] 品質ゲート、コミット・プッシュ
+
+- 実装メモ（単位 D）: `pagination` は在庫側のコピーではなく、全クエリを引き継ぐ汎用版にして `SlipComponents` に置いた。`pick_status_badge`・`ShippingSlip.format_slip_no/1`・`SlipAllocatedLot.expiration_label/1` を追加し、期限日・伝票番号の整形を共通化した。ダイアログは daisyUI の `modal-open`（JS 不要）
 
 ## 5. 単位 E: 帳票
 
-- [ ] `ReportHTML`（`document/1`・`total_pick.html.heex`・`work_order.html.heex`。外部 URL なし、A4 縦、日本語フォント）
-- [ ] `ReportController`（`total_pick/2`・`total_pick_bundle/2`・`work_order/2`。状態ごとの応答、`:busy` は 503）
-- [ ] `router.ex`（`/reports/...`。staff 以上）、画面の PDF リンクをつなぐ
-- [ ] Controller のテスト（認可・状態ごとの応答・HTML に外部 URL が無い・日本語・合計行・仕分け表）
-- [ ] 品質ゲート、コミット・プッシュ
+- [x] `ReportHTML`（`document/1`・`total_pick.html.heex`・`work_order.html.heex`。外部 URL なし、A4 縦、日本語フォント）
+- [x] `ReportController`（`total_pick/2`・`total_pick_bundle/2`・`work_order/2`。状態ごとの応答、`:busy` は 503）
+- [x] `router.ex`（`/reports/...`。staff 以上）、画面の PDF リンクをつなぐ
+- [x] Controller のテスト（認可・状態ごとの応答・HTML に外部 URL が無い・日本語・合計行・仕分け表）
+- [x] 品質ゲート、コミット・プッシュ
+- 実装メモ（単位 E）: 画面のリンク（`~p`）がルートに依存するため、単位 D と E は同じコミットにした。HEEx の `<style>` 内は `{}` が展開されないので `<%= raw(@style) %>` で差し込む。`ReportController` の認可は plug に加えてアクション内でも `Permission.authorize` を呼ぶ。実機（実 Chromium）での見た目の確認は「6. 仕上げ」で行う
 
 ## 6. 仕上げ
 
