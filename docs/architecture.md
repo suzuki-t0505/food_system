@@ -69,7 +69,8 @@ flowchart LR
 | 在庫 `/api` の送信元制限 | Cloud Armor で LB 経由の `/api` を 403。発送は egress を全トラフィック VPC 経由にし、在庫の `*.run.app` を内部トラフィックとして呼ぶ（`INVENTORY_API_BASE_URL`）。認証は従来どおりサービストークン |
 | Cloud Armor | `/api` 遮断、OWASP 事前構成ルール（感度 1）、IP ごとのレート制限、送信元 CIDR の許可リスト（任意） |
 | DB | Cloud SQL 1 インスタンスに DB・ユーザーをアプリごとに作る。プライベート IP のみ（Direct VPC egress で接続） |
-| マイグレーション・シード | アプリごとの Cloud Run Job が `{App}.Release.migrate_and_seed/0`（マイグレーション → `priv/repo/seeds.exs`。冪等）を実行する。デプロイは「イメージ更新 → `terraform apply` → Job 実行」 |
+| マイグレーション・シード | アプリごとの Cloud Run Job が `{App}.Release.migrate_and_seed/0`（マイグレーション → `priv/repo/seeds.exs`。冪等）を実行する。デプロイは `dev` ブランチへのマージで GitHub Actions（`deploy-dev.yml`）が行う（下記「自動デプロイ」） |
+| 自動デプロイ | `dev` への push で、アプリごとに Docker イメージを build → Artifact Registry へ push（タグはコミット SHA）し、vault → ship の順に「Job のイメージ更新 → Job 実行（完了待ち）→ サービスのイメージ更新」を行う。GCP へは Workload Identity Federation（キーレス）で認証し、このリポジトリの `dev` ブランチ上のワークフローだけがデプロイ用サービスアカウントを借用できる。Cloud Run サービス・Job のイメージは `gcloud` で更新するため Terraform は `image` を `ignore_changes` とし、`terraform apply` でイメージは巻き戻らない（`var.image` は新規作成時のみ使われる）。`main`（本番）へのデプロイは未対応 |
 | イメージ | `mix phx.gen.release --docker` で生成した各アプリの `Dockerfile`。Artifact Registry `food-system` に置く |
 
 
@@ -424,6 +425,7 @@ end
   - `Makefile` の `check`（`mix_compile` → `mix_format` → `mix_credo` → `mix_test`）。ローカルの `mix_format` は整形する。
   - 両アプリの `mix.exs` に `credo`（`only: [:dev, :test]`）、リポジトリに `.credo.exs`。`precommit` エイリアスは `compile --warnings-as-errors` / `deps.unlock --unused` / `format` / `credo --all` / `test`。
   - PR ワークフロー `.github/workflows/ci.yml`。`pull_request` のみで、アプリごとに compile → `format --check-formatted` → `credo --all` → `test` を実行する（`main` への push では回さない）。実行環境は Elixir 1.20.5 / OTP 29 と `postgres:15.2`。
+  - デプロイワークフロー `.github/workflows/deploy-dev.yml`。`dev` への push（と手動実行）で動き、build-push → deploy の順に実行する（§2.3 の「自動デプロイ」）。品質ゲートは PR 時の `ci.yml` で、デプロイ時は再実行しない。
   - `config/test.exs` の DB ホストは `PGHOST`（既定 `db`）で上書きできる。
 - `.formatter.exs` は `import_deps`（`:ecto` / `:ecto_sql` / `:phoenix`）と HEEx フォーマッタ（`Phoenix.LiveView.HTMLFormatter`）を設定し、`inputs` に `heex` を含める。
 - `mix test` は毎回 DB を再作成する（`ecto.drop` / `ecto.create` / `ecto.migrate` を alias に含める）。
@@ -454,7 +456,7 @@ end
 | :-- | :-- | :-- |
 | 1 | ULID 依存の採否 | **解決済み**: `ecto_ulid_next` を採用（§4） |
 | 2 | `phx.gen.auth` 生成物の削減範囲 | **解決済み**: 実生成して確認し、§8.1 のとおり削減した。セッション有効期間は `inserted_at` ベースで設計と一致。ULID 化は schema を `use {App}.Schema` に替え、migration を `:binary_id` の主キー・FK にする |
-| 3 | 本番の構成 | **一部解決**: デプロイ先を GCP（LB ＋ Cloud Armor ＋ Cloud Run ＋ Cloud Run Job ＋ Cloud SQL）とし、TLS 終端と `/api` の送信元制限を §2.3 のとおり Terraform で定義した。リリースタスク（`migrate` / `migrate_and_seed`）を追加。未決: Chromium の本番構成、`X-Forwarded-For` からの送信元 IP（§12）、CI/CD、監視 |
+| 3 | 本番の構成 | **一部解決**: デプロイ先を GCP（LB ＋ Cloud Armor ＋ Cloud Run ＋ Cloud Run Job ＋ Cloud SQL）とし、TLS 終端と `/api` の送信元制限を §2.3 のとおり Terraform で定義した。リリースタスク（`migrate` / `migrate_and_seed`）を追加。CI/CD は `dev` ブランチへのマージで dev 環境へ自動デプロイするところまで解決（§2.3・§14）。未決: Chromium の本番構成、`X-Forwarded-For` からの送信元 IP（§12）、`main`（本番）へのデプロイ、監視 |
 | 4 | PDF のライブラリ最終決定 | `ChromicPDF` を前提に、環境構築セッションで確定。サンドボックス、プール数、タイムアウト |
 | 5 | 品質ゲートの整備 | **解決済み**: `check`、`credo`、`.credo.exs`、PR ワークフローを整備（§14）。CI の実行は PR を出して初めて確認できる |
 | 6 | 環境変数の命名の確定 | **一部解決**: `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` を確定し `runtime.exs` に反映済み（段階 1）。在庫 API 関連は、在庫側の `INVENTORY_API_TOKENS` を段階 3 で、発送側の `INVENTORY_API_BASE_URL` / `INVENTORY_API_TOKEN` / `INVENTORY_WAREHOUSE_ID` / `INVENTORY_API_*_TIMEOUT_MS` を段階 4 で確定・反映済み（`runtime.exs`。dev は既定値あり。本番は `BASE_URL`・`TOKEN` が必須、`WAREHOUSE_ID` は任意）。**解決済み** |

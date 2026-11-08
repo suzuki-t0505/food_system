@@ -107,6 +107,8 @@ CI でも同じ内容を回す（PR のみ。`.github/workflows/ci.yml`、[archi
 - `main` は常にデプロイ可能（テストが通る）状態に保ち、直接コミットしない。
 - 作業ブランチは用途別の接頭辞を付ける: `feature/{要件ID}-{内容}`（例：`feature/f-v2-inventory-receipt`）、`fix/{内容}`、`docs/{内容}`。自動化ツールが指定するブランチ名（例：`claude/...`）がある場合はそれに従う。
 - 1 つのブランチに複数の無関係な変更を混ぜない。
+- **`dev` ブランチ = dev 環境（GCP）へ自動デプロイされるブランチ**。作業ブランチから `dev` へ PR を出し、CI（`ci.yml`）を通してマージすると、GitHub Actions（`.github/workflows/deploy-dev.yml`）がイメージを build して Cloud Run（サービスと migrate Job）を更新する。`dev` へ直接 push しない。`main` へのマージではデプロイされない（本番化は別途）。
+- マイグレーションは Job の実行（新スキーマ）からサービス切替までの間、旧コードが新スキーマで動くことを前提に、後方互換にする（NOT NULL 追加は `default:` 付きなど。architecture §5）。
 
 ### 3.2 コミット
 

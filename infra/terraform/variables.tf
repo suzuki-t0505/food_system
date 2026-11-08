@@ -27,12 +27,12 @@ variable "ship_subdomain" {
 }
 
 variable "food_vault_image_tag" {
-  description = "Artifact Registry の food_vault イメージのタグ"
+  description = "Artifact Registry の food_vault イメージのタグ(初回作成用。以降のイメージ更新は GitHub Actions が行い、Terraform は無視する)"
   type        = string
 }
 
 variable "food_ship_image_tag" {
-  description = "Artifact Registry の food_ship イメージのタグ"
+  description = "Artifact Registry の food_ship イメージのタグ(初回作成用。以降のイメージ更新は GitHub Actions が行い、Terraform は無視する)"
   type        = string
 }
 
@@ -80,6 +80,28 @@ variable "rate_limit_per_minute" {
   description = "送信元 IP ごとの 1 分あたりのリクエスト上限(超過は 429)"
   type        = number
   default     = 600
+}
+
+variable "github_repository" {
+  description = "GitHub Actions からのデプロイを許可するリポジトリ(owner/repo)"
+  type        = string
+  default     = "suzuki-t0505/food_system"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", var.github_repository))
+    error_message = "github_repository は owner/repo 形式で指定してください。"
+  }
+}
+
+variable "github_deploy_branch" {
+  description = "自動デプロイを許可するブランチ(このブランチ上のワークフローだけが WIF で認証できる)"
+  type        = string
+  default     = "dev"
+
+  validation {
+    condition     = length(var.github_deploy_branch) > 0
+    error_message = "github_deploy_branch は空にできません。"
+  }
 }
 
 variable "inventory_warehouse_id" {

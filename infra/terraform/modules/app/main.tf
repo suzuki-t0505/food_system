@@ -198,6 +198,15 @@ resource "google_cloud_run_v2_service" "this" {
     }
   }
 
+  # イメージは GitHub Actions(deploy-dev.yml)が gcloud で更新する。var.image は新規作成時のみ使われる
+  lifecycle {
+    ignore_changes = [
+      template[0].containers[0].image,
+      client,
+      client_version,
+    ]
+  }
+
   depends_on = [
     google_secret_manager_secret_iam_member.own,
     google_secret_manager_secret_iam_member.shared,
@@ -267,6 +276,15 @@ resource "google_cloud_run_v2_job" "migrate" {
         }
       }
     }
+  }
+
+  # イメージは GitHub Actions(deploy-dev.yml)が gcloud で更新する。var.image は新規作成時のみ使われる
+  lifecycle {
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client,
+      client_version,
+    ]
   }
 
   depends_on = [

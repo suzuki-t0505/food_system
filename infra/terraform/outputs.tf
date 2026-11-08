@@ -23,6 +23,16 @@ output "migrate_jobs" {
   }
 }
 
+output "workload_identity_provider" {
+  description = "GitHub Environment の Variables GCP_WORKLOAD_IDENTITY_PROVIDER に登録する"
+  value       = google_iam_workload_identity_pool_provider.github.name
+}
+
+output "deployer_service_account" {
+  description = "GitHub Environment の Variables GCP_SERVICE_ACCOUNT に登録する"
+  value       = google_service_account.deployer.email
+}
+
 output "initial_admin_password_secrets" {
   description = "gcloud secrets versions access latest --secret <name> で初期管理者のパスワードを確認する"
   value = {
