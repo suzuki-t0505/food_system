@@ -300,6 +300,10 @@ defmodule FoodShip.Inventory.Client do
 
   defp parse_allocation(_allocation), do: {:error, :connection}
 
+  defp parse_default_warehouse(%{"id" => id}) when is_binary(id) and id != "", do: {:ok, id}
+  defp parse_default_warehouse(nil), do: {:error, :warehouse_not_configured}
+  defp parse_default_warehouse(_warehouse), do: {:error, :connection}
+
   defp parse_item(%{"id" => id} = item) do
     {:ok,
      %{
@@ -312,10 +316,6 @@ defmodule FoodShip.Inventory.Client do
        expiration_type: item["expiration_type"]
      }}
   end
-
-  defp parse_default_warehouse(%{"id" => id}) when is_binary(id) and id != "", do: {:ok, id}
-  defp parse_default_warehouse(nil), do: {:error, :warehouse_not_configured}
-  defp parse_default_warehouse(_warehouse), do: {:error, :connection}
 
   defp parse_item(nil), do: {:error, :not_found}
   defp parse_item(_item), do: {:error, :connection}
