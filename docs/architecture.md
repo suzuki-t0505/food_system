@@ -366,7 +366,6 @@ end
 | 在庫 | `INVENTORY_API_TOKENS` | サービストークン（カンマ区切り・複数可） | 必須 |
 | 発送 | `INVENTORY_API_BASE_URL` | 在庫 API のベース URL（Compose 内は `http://food_vault_web:4000`。開発は既定値あり） | 本番は必須 |
 | 発送 | `INVENTORY_API_TOKEN` | 在庫 API 用のサービストークン（開発は在庫側と同じ既定値あり） | 本番は必須 |
-| 発送 | `INVENTORY_WAREHOUSE_ID` | 対象倉庫 ID（在庫側 `GET /api/v1/warehouses` で確認）。**任意**: GCP の初回デプロイは空で起動するため、未設定でも起動し、設定されるまで伝票登録・再引当・数量変更を拒否する（画面に警告を表示） | 任意（業務操作には必要） |
 | 発送 | `INVENTORY_API_CONNECT_TIMEOUT_MS` / `INVENTORY_API_RECEIVE_TIMEOUT_MS` | タイムアウト（既定 5000 / 15000） | 任意 |
 | 発送 | PDF の設定（プール数・タイムアウト） | ChromicPDF（[§10](#10-pdf-帳票発送システム)） | 任意 |
 
@@ -459,9 +458,9 @@ end
 | 3 | 本番の構成 | **一部解決**: デプロイ先を GCP（LB ＋ Cloud Armor ＋ Cloud Run ＋ Cloud Run Job ＋ Cloud SQL）とし、TLS 終端と `/api` の送信元制限を §2.3 のとおり Terraform で定義した。リリースタスク（`migrate` / `migrate_and_seed`）を追加。CI/CD は `dev` ブランチへのマージで dev 環境へ自動デプロイするところまで解決（§2.3・§14）。未決: Chromium の本番構成、`X-Forwarded-For` からの送信元 IP（§12）、`main`（本番）へのデプロイ、監視 |
 | 4 | PDF のライブラリ最終決定 | `ChromicPDF` を前提に、環境構築セッションで確定。サンドボックス、プール数、タイムアウト |
 | 5 | 品質ゲートの整備 | **解決済み**: `check`、`credo`、`.credo.exs`、PR ワークフローを整備（§14）。CI の実行は PR を出して初めて確認できる |
-| 6 | 環境変数の命名の確定 | **一部解決**: `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` を確定し `runtime.exs` に反映済み（段階 1）。在庫 API 関連は、在庫側の `INVENTORY_API_TOKENS` を段階 3 で、発送側の `INVENTORY_API_BASE_URL` / `INVENTORY_API_TOKEN` / `INVENTORY_WAREHOUSE_ID` / `INVENTORY_API_*_TIMEOUT_MS` を段階 4 で確定・反映済み（`runtime.exs`。dev は既定値あり。本番は `BASE_URL`・`TOKEN` が必須、`WAREHOUSE_ID` は任意）。**解決済み** |
+| 6 | 環境変数の命名の確定 | **一部解決**: `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` を確定し `runtime.exs` に反映済み（段階 1）。在庫 API 関連は、在庫側の `INVENTORY_API_TOKENS` を段階 3 で、発送側の `INVENTORY_API_BASE_URL` / `INVENTORY_API_TOKEN` / `INVENTORY_API_*_TIMEOUT_MS` を段階 4 で確定・反映済み（`runtime.exs`。dev は既定値あり。本番は `BASE_URL`・`TOKEN` が必須）。対象倉庫は環境変数ではなく、在庫のデフォルト倉庫を API ⑥ で取得する。**解決済み** |
 | 7 | 在庫 0 ロットの整理 | 長期運用での肥大化対策（アーカイブなど）。運用開始後に決める |
 | 8 | ログイン試行制限・セッション期間・「ログインしたままにする」 | **解決済み（一部対象外）**: セッション期間と remember me は `phx.gen.auth` の既定を踏襲（§8.1）。ログイン試行制限は引き続き対象外（P2） |
 | 9 | 在庫側の核の実装（段階 2） | **解決済み**: ページングは `scrivener_ecto`（`Repo` に `use Scrivener, page_size: 20`）。並行テストは `ConcurrencyCase`（`sandbox: false` で実コミット、`async: false`、後始末は `TRUNCATE`）。追記専用は DB トリガー（`forbid_update_delete()`）でも担保。在庫 0 のロットは引当済数も 0（CHECK 制約）なので、商品・倉庫のアーカイブ規則の「`allocated` なオーダーに含まれない」は在庫 0 の検査で満たされる |
 | 10 | 在庫 API の実装（段階 3） | **解決済み**: ①②③⑤⑥⑦ を `/api/v1` に実装（④ 出庫取消は段階 5）。認証・共通エラー形式・`operator` の扱いは §7。Endpoint レベルのエラー（壊れた JSON など）を JSON にするため `render_errors` を JSON 先頭にした。本番の TLS 終端と `/api` の送信元制限は #3 の本番構成の決定後 |
-| 11 | 発送側 P0 の実装（段階 4） | **解決済み**: マスタ・`Inventory.Client`・伝票登録／再引当／数量変更／取消／梱包完了・作業画面を実装（§9）。`allocation_attempted_at` は同時操作の識別のためマイクロ秒精度（§9.4）。`INVENTORY_WAREHOUSE_ID` は任意（§11）。トータルピック・PDF・CSV・出庫取消は段階 5 |
+| 11 | 発送側 P0 の実装（段階 4） | **解決済み**: マスタ・`Inventory.Client`・伝票登録／再引当／数量変更／取消／梱包完了・作業画面を実装（§9）。`allocation_attempted_at` は同時操作の識別のためマイクロ秒精度（§9.4）。対象倉庫は在庫のデフォルト倉庫を API ⑥ で取得する（環境変数は廃止）。トータルピック・PDF・CSV・出庫取消は段階 5 |

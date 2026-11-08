@@ -9,10 +9,15 @@ defmodule FoodShipWeb.ShippingSlipLive.FormTest do
   import Phoenix.LiveViewTest
 
   alias FoodShip.{InventoryStub, Repo, ShippingSlips}
-  alias FoodShip.Inventory.Client, as: InventoryClient
   alias FoodShip.ShippingSlips.ShippingSlip
 
   setup {Req.Test, :set_req_test_from_context}
+
+  # 画面の表示・伝票の作成では、在庫のデフォルト倉庫の取得が走る
+  setup do
+    InventoryStub.stub_defaults()
+    :ok
+  end
 
   @orders "/api/v1/shipment_orders"
   @lot "01JE0000000000000000000001"
@@ -320,12 +325,13 @@ defmodule FoodShipWeb.ShippingSlipLive.FormTest do
       assert Repo.aggregate(ShippingSlip, :count) == 0
     end
 
-    test "対象倉庫が未設定なら警告を出し、保存しない", %{conn: conn} do
+    test "デフォルト倉庫が未設定なら警告を出し、保存しない", %{conn: conn} do
       client = client_fixture()
       item = shipping_item_fixture()
-      previous = Application.get_env(:food_ship, InventoryClient)
-      Application.put_env(:food_ship, InventoryClient, Keyword.put(previous, :warehouse_id, nil))
-      on_exit(fn -> Application.put_env(:food_ship, InventoryClient, previous) end)
+
+      InventoryStub.routes([
+        {"GET", "/api/v1/warehouses", &InventoryStub.without_default_warehouse/1}
+      ])
 
       {:ok, lv, html} = live(conn, ~p"/shipping_slips/new")
       assert html =~ "対象倉庫が設定されていません。管理者に連絡してください。"

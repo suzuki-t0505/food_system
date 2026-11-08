@@ -69,6 +69,97 @@ defmodule FoodVault.WarehousesTest do
       scope = user_scope_fixture(user_fixture(%{role: :staff, must_change_password: false}))
       assert {:error, :forbidden} = Warehouses.archive_warehouse(scope, warehouse_fixture())
     end
+
+    test "デフォルト倉庫は拒否し、別の倉庫をデフォルトにすればアーカイブできる" do
+      scope = user_scope_fixture()
+      first = warehouse_fixture()
+      second = warehouse_fixture()
+      {:ok, first} = Warehouses.set_default_warehouse(scope, first)
+
+      assert {:error, :default_warehouse} = Warehouses.archive_warehouse(scope, first)
+
+      {:ok, _} = Warehouses.set_default_warehouse(scope, second)
+      first = Warehouses.get_warehouse!(first.id)
+      assert {:ok, archived} = Warehouses.archive_warehouse(scope, first)
+      assert Warehouse.archived?(archived)
+    end
+  end
+
+  describe "set_default_warehouse/2 と get_default_warehouse/0" do
+    test "未設定なら nil" do
+      assert is_nil(Warehouses.get_default_warehouse())
+    end
+
+    test "デフォルトにでき、別の倉庫に切り替えると前のデフォルトは外れる" do
+      scope = user_scope_fixture()
+      first = warehouse_fixture()
+      second = warehouse_fixture()
+
+      assert {:ok, %Warehouse{is_default: true}} = Warehouses.set_default_warehouse(scope, first)
+      assert Warehouses.get_default_warehouse().id == first.id
+
+      assert {:ok, %Warehouse{is_default: true}} = Warehouses.set_default_warehouse(scope, second)
+      assert Warehouses.get_default_warehouse().id == second.id
+      refute Warehouses.get_warehouse!(first.id).is_default
+    end
+
+    test "すでにデフォルトなら成功し、そのまま" do
+      scope = user_scope_fixture()
+      warehouse = warehouse_fixture()
+      {:ok, _} = Warehouses.set_default_warehouse(scope, warehouse)
+
+      assert {:ok, %Warehouse{is_default: true}} =
+               Warehouses.set_default_warehouse(scope, warehouse)
+
+      assert Warehouses.get_default_warehouse().id == warehouse.id
+    end
+
+    test "アーカイブ済みの倉庫はデフォルトにできない" do
+      scope = user_scope_fixture()
+      warehouse = warehouse_fixture()
+      {:ok, archived} = Warehouses.archive_warehouse(scope, warehouse)
+
+      assert {:error, :archived} = Warehouses.set_default_warehouse(scope, archived)
+      assert is_nil(Warehouses.get_default_warehouse())
+    end
+
+    test "登録・更新ではデフォルトを変えられない" do
+      scope = user_scope_fixture()
+
+      assert {:ok, created} =
+               Warehouses.create_warehouse(scope, %{
+                 warehouse_code: "DEF-1",
+                 warehouse_name: "X",
+                 is_default: true
+               })
+
+      refute created.is_default
+
+      assert {:ok, updated} = Warehouses.update_warehouse(scope, created, %{is_default: true})
+      refute updated.is_default
+    end
+
+    test "viewer・staff は拒否する" do
+      warehouse = warehouse_fixture()
+
+      for role <- [:viewer, :staff] do
+        scope = user_scope_fixture(user_fixture(%{role: role, must_change_password: false}))
+        assert {:error, :forbidden} = Warehouses.set_default_warehouse(scope, warehouse)
+      end
+
+      assert is_nil(Warehouses.get_default_warehouse())
+    end
+
+    test "部分ユニークインデックスで、デフォルトは 2 件にならない" do
+      first = warehouse_fixture()
+      second = warehouse_fixture()
+      {:ok, _} = Warehouses.set_default_warehouse(user_scope_fixture(), first)
+
+      assert {:error, changeset} =
+               second |> Warehouse.default_changeset() |> FoodVault.Repo.update()
+
+      assert %{is_default: [_]} = errors_on(changeset)
+    end
   end
 
   describe "lock_active_warehouse_for_share/1" do

@@ -57,7 +57,6 @@ module "food_ship" {
 
   env = {
     INVENTORY_API_BASE_URL = module.food_vault.service_uri
-    INVENTORY_WAREHOUSE_ID = var.inventory_warehouse_id
   }
 
   secret_env = {

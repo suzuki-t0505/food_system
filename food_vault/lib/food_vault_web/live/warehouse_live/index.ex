@@ -1,5 +1,5 @@
 defmodule FoodVaultWeb.WarehouseLive.Index do
-  @moduledoc "倉庫一覧(全ロール参照)。アーカイブ・復帰は `admin` のみ。"
+  @moduledoc "倉庫一覧(全ロール参照)。デフォルト倉庫の設定・アーカイブ・復帰は `admin` のみ。"
 
   use FoodVaultWeb, :live_view
 
@@ -51,7 +51,16 @@ defmodule FoodVaultWeb.WarehouseLive.Index do
             <tr :for={warehouse <- @page.entries} id={"warehouse-#{warehouse.id}"}>
               <td>{warehouse.warehouse_code}</td>
               <td>{warehouse.warehouse_name}</td>
-              <td><.archived_badge archived_at={warehouse.archived_at} /></td>
+              <td class="space-x-1">
+                <span
+                  :if={Warehouse.default?(warehouse)}
+                  class="badge badge-primary"
+                  id={"default-badge-#{warehouse.id}"}
+                >
+                  デフォルト
+                </span>
+                <.archived_badge archived_at={warehouse.archived_at} />
+              </td>
               <td
                 :if={Permission.can?(@current_scope.user, :manage_masters)}
                 class="space-x-2 text-right"
@@ -64,7 +73,17 @@ defmodule FoodVaultWeb.WarehouseLive.Index do
                   編集
                 </.link>
                 <button
-                  :if={!Warehouse.archived?(warehouse)}
+                  :if={!Warehouse.archived?(warehouse) and !Warehouse.default?(warehouse)}
+                  phx-click="set_default"
+                  phx-value-id={warehouse.id}
+                  data-confirm="この倉庫をデフォルト倉庫にします。発送システムはこの倉庫から引き当てます。よろしいですか?"
+                  class="btn btn-sm btn-primary btn-soft"
+                  id={"set-default-#{warehouse.id}"}
+                >
+                  デフォルトにする
+                </button>
+                <button
+                  :if={!Warehouse.archived?(warehouse) and !Warehouse.default?(warehouse)}
                   phx-click="archive"
                   phx-value-id={warehouse.id}
                   data-confirm="この倉庫をアーカイブします。よろしいですか?"
@@ -115,6 +134,10 @@ defmodule FoodVaultWeb.WarehouseLive.Index do
     change(socket, id, &Warehouses.archive_warehouse/2, "倉庫をアーカイブしました。")
   end
 
+  def handle_event("set_default", %{"id" => id}, socket) do
+    change(socket, id, &Warehouses.set_default_warehouse/2, "デフォルト倉庫を設定しました。")
+  end
+
   def handle_event("restore", %{"id" => id}, socket) do
     change(socket, id, &Warehouses.restore_warehouse/2, "倉庫を復帰しました。")
   end
@@ -128,6 +151,17 @@ defmodule FoodVaultWeb.WarehouseLive.Index do
 
         {:error, :has_stock} ->
           {:noreply, put_flash(socket, :error, "在庫があるため、アーカイブできません。")}
+
+        {:error, :default_warehouse} ->
+          {:noreply,
+           put_flash(
+             socket,
+             :error,
+             "デフォルト倉庫はアーカイブできません。別の倉庫をデフォルトにしてください。"
+           )}
+
+        {:error, :archived} ->
+          {:noreply, put_flash(socket, :error, "アーカイブ済みの倉庫はデフォルトにできません。")}
 
         {:error, _} ->
           {:noreply, put_flash(socket, :error, "変更できませんでした。")}

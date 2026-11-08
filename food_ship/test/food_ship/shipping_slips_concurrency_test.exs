@@ -12,6 +12,12 @@ defmodule FoodShip.ShippingSlipsConcurrencyTest do
 
   setup {Req.Test, :set_req_test_from_context}
 
+  # 画面の表示・伝票の作成では、在庫のデフォルト倉庫の取得が走る
+  setup do
+    InventoryStub.stub_defaults()
+    :ok
+  end
+
   @orders "/api/v1/shipment_orders"
 
   test "同じ伝票の再引当を同時に走らせても、データが壊れない(片方は :stale か :invalid_status)" do

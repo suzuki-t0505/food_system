@@ -11,8 +11,6 @@ services:
       # 在庫 API(food_vault の INVENTORY_API_TOKENS の既定値と同じ開発用トークン)
       INVENTORY_API_BASE_URL: http://food_vault_web:4000
       INVENTORY_API_TOKEN: ${INVENTORY_API_TOKEN-dev-inventory-api-token}
-      # 対象倉庫の ID(未設定の間は伝票登録・再引当を拒否する)。確認方法は food_ship/README.md
-      INVENTORY_WAREHOUSE_ID: ${INVENTORY_WAREHOUSE_ID-}
     links:
       - db
     ports:
