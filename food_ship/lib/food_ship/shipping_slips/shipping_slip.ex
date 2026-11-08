@@ -7,7 +7,8 @@ defmodule FoodShip.ShippingSlips.ShippingSlip do
 
   数量・期限は Context(`FoodShip.ShippingSlips`)がマスタから計算して渡す。
   `slip_no` は DB シーケンスで採番する読み取り専用の列(`cast` に含めない)。
-  `total_pick_id`(トータルピック)は段階 5 で追加する。
+  `total_pick_id`(トータルピック)は `FoodShip.TotalPicks` が管理する(`cast` に含めない)。
+  数量・出荷予定日の変更や取消ではピックから外す(Context が同一トランザクションで行う)。
 
     * `create_changeset/2` - 登録(`pending`)
     * `update_changeset/2` - 件数・出荷予定日の変更(`pending` に戻す)
@@ -21,6 +22,7 @@ defmodule FoodShip.ShippingSlips.ShippingSlip do
   alias FoodShip.Clients.Client
   alias FoodShip.ShippingItems.ShippingItem
   alias FoodShip.ShippingSlips.SlipAllocatedLot
+  alias FoodShip.TotalPicks.TotalPick
 
   @statuses [:pending, :allocated, :shortage, :packed, :cancelled, :reversed]
   @allocation_errors [
@@ -68,6 +70,7 @@ defmodule FoodShip.ShippingSlips.ShippingSlip do
     belongs_to :packed_by_user, User
     belongs_to :cancelled_by_user, User
     belongs_to :reversed_by_user, User
+    belongs_to :total_pick, TotalPick
 
     has_many :allocated_lots, SlipAllocatedLot
 

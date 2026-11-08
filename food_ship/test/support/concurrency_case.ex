@@ -13,7 +13,7 @@ defmodule FoodShip.ConcurrencyCase do
   alias Ecto.Adapters.SQL.Sandbox
   alias FoodShip.Repo
 
-  @tables ~w(slip_allocated_lots shipping_slips expiration_rules shipping_items clients users_tokens users)
+  @tables ~w(slip_allocated_lots shipping_slips total_picks expiration_rules shipping_items clients users_tokens users)
 
   using do
     quote do

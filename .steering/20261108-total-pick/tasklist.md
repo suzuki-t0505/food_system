@@ -26,14 +26,15 @@
 
 ## 2. 単位 B: ピックの作成・集計（Context）
 
-- [ ] migration `create_total_picks`（シーケンス・テーブル・CHECK・索引・`shipping_slips.total_pick_id`・CHECK `total_pick_only_when_picked`）
-- [ ] `TotalPicks.TotalPick` スキーマ（`pick_no_label/1`・`status_label/1`）、`ShippingSlip` に `belongs_to :total_pick`、`preload_slip` に追加
-- [ ] `TotalPicks`: `list_candidates/1`・`create_total_picks/3`・`get_total_pick!/1`・`list_total_picks/1`・`summarize/1`
-- [ ] `TotalPicks`: `reissue_total_pick/2`・`cancel_total_pick/2`・`release/2`
-- [ ] フィクスチャ（`TotalPicksFixtures`。Context の公開 API 経由）
-- [ ] Context のテスト（design §9: 作成・除外条件・追加ピック・空選択・ロールバック・権限、再発行、取消、`release`、集計）
-- [ ] 並行性テスト（同じ伝票への同時作成で片方だけ成功。取消と伝票変更の同時実行でデッドロックしない）
-- [ ] 品質ゲート、コミット・プッシュ
+- [x] migration `create_total_picks`（シーケンス・テーブル・CHECK・索引・`shipping_slips.total_pick_id`・CHECK `total_pick_only_when_picked`）
+- [x] `TotalPicks.TotalPick` スキーマ（`pick_no_label/1`・`status_label/1`）、`ShippingSlip` に `belongs_to :total_pick`、`preload_slip` に追加
+- [x] `TotalPicks`: `list_candidates/1`・`create_total_picks/3`・`get_total_pick!/1`・`list_total_picks/1`・`summarize/1`
+- [x] `TotalPicks`: `reissue_total_pick/2`・`cancel_total_pick/2`・`release/2`
+- [x] フィクスチャ（`TotalPicksFixtures`。Context の公開 API 経由）
+- [x] Context のテスト（design §9: 作成・除外条件・追加ピック・空選択・ロールバック・権限、再発行、取消、`release`、集計）
+- [x] 並行性テスト（同じ伝票への同時作成で片方だけ成功。取消と伝票変更の同時実行でデッドロックしない）
+- [x] 品質ゲート、コミット・プッシュ
+- 実装メモ: `ShippingSlip` に `belongs_to :total_pick` を追加（`preload_slip` への `:total_pick` の追加は単位 C）。`list_total_picks/2` の `slip_count` は相関サブクエリで算出する。`list_makers/0`（絞り込みの選択肢）を追加した。フィクスチャの引当済み伝票は `InventoryStub.routes` で `allocated` にする（使うテストは `async: false` ＋共有モード）
 
 ## 3. 単位 C: 伝票の変更との連動
 
