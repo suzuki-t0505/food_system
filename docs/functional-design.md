@@ -114,6 +114,7 @@ erDiagram
 | :-- | :-- | :-- |
 | `maker_code` / `warehouse_code` | string | NOT NULL, UNIQUE |
 | `maker_name` / `warehouse_name` | string | NOT NULL |
+| `is_default`（`warehouses` のみ） | boolean | NOT NULL, 既定 false。デフォルト倉庫（発送システムの引当先）。部分ユニークインデックス（`WHERE is_default`）で 0 件または 1 件 |
 | `archived_at` | utc_datetime | NULL可（NULL=有効） |
 
 #### `items`
@@ -485,7 +486,8 @@ stateDiagram-v2
 | :-- | :-- |
 | 入数・期限区分の変更 | ロット（在庫 0 を含む）が 1 件でもあれば拒否。入荷・引当・移動先作成は `items` 行を `FOR SHARE`、マスタ更新は `FOR UPDATE` で読んでから「ロットが無いこと」を検査（競合対策） |
 | 商品のアーカイブ | その商品の全ロットが在庫 0 で、`allocated` のオーダー明細に含まれていないときだけ可 |
-| 倉庫のアーカイブ | その倉庫の全ロットが在庫 0・引当なしのときだけ可 |
+| 倉庫のアーカイブ | その倉庫の全ロットが在庫 0・引当なしのときだけ可。デフォルト倉庫は不可（別の倉庫をデフォルトにしてから） |
+| デフォルト倉庫 | `admin` が倉庫一覧の「デフォルトにする」で設定・切り替える（0 件または 1 件。手動設定のみで自動設定はしない）。アーカイブ済みの倉庫は設定不可。発送システムは API ⑥ の `is_default` で引当先を取得する |
 | メーカーのアーカイブ | 有効な商品を持たないときだけ可 |
 | アーカイブ済みの扱い | 入荷・出庫引当・移動（元／先）の対象にできない。画面の選択肢と API ⑥⑦ の一覧に出さない。API ① で指定されたら 422 `validation_failed`。出庫取消は、対象の商品・倉庫がアーカイブ済みなら 409 `invalid_state` |
 | 復帰 | `admin` が `archived_at` を NULL に戻す |
@@ -726,7 +728,7 @@ sequenceDiagram
 **⑥⑦**:
 
 ```json
-{ "warehouses": [{ "id": "01JA...", "warehouse_code": "W01", "warehouse_name": "第1倉庫" }] }
+{ "warehouses": [{ "id": "01JA...", "warehouse_code": "W01", "warehouse_name": "第1倉庫", "is_default": true }] }
 { "items": [{ "id": "01JC...", "item_code": "4901234567894", "item_name": "商品A", "maker_id": "01JF...", "maker_name": "メーカーX", "units_per_case": 12, "expiration_type": "best_before" }] }
 ```
 
@@ -798,7 +800,7 @@ sequenceDiagram
 | マスタ管理 | 発注元、発送商品・梱包換算（在庫側から再取得）、出荷期限ルールの CRUD | 参照は全ロール／編集は `admin` |
 | ユーザー管理 | 一覧・登録・ロール変更・パスワード再設定・アーカイブ | `admin` |
 
-**段階 4 で実装したルーティング（発送）**: `/`（作業画面へ redirect）、`/shipping_slips`（作業画面。`?date=YYYY-MM-DD&filter=all|unpacked|shortage`。全ロール）、`/shipping_slips/new`・`/shipping_slips/:id/edit`（伝票登録・数量変更。`staff` 以上）、`/masters/clients`・`/masters/shipping_items`・`/masters/expiration_rules`（参照。全ロール）、`/management/{clients,shipping_items,expiration_rules}/new|:id/edit`（編集。`admin`）。対象倉庫（`INVENTORY_WAREHOUSE_ID`）が未設定の間は、伝票登録・再引当・数量変更を拒否して画面に警告を出す。
+**段階 4 で実装したルーティング（発送）**: `/`（作業画面へ redirect）、`/shipping_slips`（作業画面。`?date=YYYY-MM-DD&filter=all|unpacked|shortage`。全ロール）、`/shipping_slips/new`・`/shipping_slips/:id/edit`（伝票登録・数量変更。`staff` 以上）、`/masters/clients`・`/masters/shipping_items`・`/masters/expiration_rules`（参照。全ロール）、`/management/{clients,shipping_items,expiration_rules}/new|:id/edit`（編集。`admin`）。対象倉庫（在庫のデフォルト倉庫。引当のたびに API ⑥ で取得する）が未設定の間は、伝票登録・再引当・数量変更を拒否して画面に警告を出す（在庫 API に接続できないときは警告を出さず、操作時に通信エラーを表示する）。
 
 PDF 帳票は LiveView ではなく Controller（`ReportController`：`total_pick/2`・`work_order/2`・`total_pick_bundle/2`）でダウンロード配信し、認可は HTTP plug で `staff` 以上に限定する。
 

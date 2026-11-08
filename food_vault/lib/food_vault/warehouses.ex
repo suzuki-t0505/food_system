@@ -7,6 +7,9 @@ defmodule FoodVault.Warehouses do
 
   アーカイブできるのは、全ロットが在庫 0 の倉庫だけ(`{:error, :has_stock}`)。
   在庫 0 のロットは引当済数も 0(CHECK 制約)なので、引当なしの条件も満たす。
+
+  デフォルト倉庫(発送システムの引当先)は 0 件または 1 件。アーカイブ済みの倉庫はデフォルトに
+  できず(`{:error, :archived}`)、デフォルトの倉庫はアーカイブできない(`{:error, :default_warehouse}`)。
   """
 
   import Ecto.Query, warn: false
@@ -39,6 +42,39 @@ defmodule FoodVault.Warehouses do
   @doc "倉庫を取得する。"
   def get_warehouse!(id), do: Repo.get!(Warehouse, id)
 
+  @doc "デフォルト倉庫。未設定なら `nil`。"
+  def get_default_warehouse do
+    Warehouse
+    |> where([w], w.is_default and is_nil(w.archived_at))
+    |> Repo.one()
+  end
+
+  @doc """
+  倉庫をデフォルトにする。現在のデフォルトは外れる(常に 0 件または 1 件)。
+
+  アーカイブ済みなら `{:error, :archived}`。すでにデフォルトなら何もせず `{:ok, warehouse}`。
+  """
+  def set_default_warehouse(scope, %Warehouse{} = warehouse) do
+    with :ok <- authorize(scope), do: Repo.transact(fn -> do_set_default(warehouse.id) end)
+  end
+
+  defp do_set_default(warehouse_id) do
+    warehouse = lock_warehouse(warehouse_id)
+
+    cond do
+      Warehouse.archived?(warehouse) ->
+        {:error, :archived}
+
+      Warehouse.default?(warehouse) ->
+        {:ok, warehouse}
+
+      true ->
+        # 部分ユニークインデックスがあるので、先に今のデフォルトを外してから設定する
+        Warehouse |> where([w], w.is_default) |> Repo.update_all(set: [is_default: false])
+        warehouse |> Warehouse.default_changeset() |> Repo.update()
+    end
+  end
+
   @doc "フォーム用の changeset。"
   def change_warehouse(%Warehouse{} = warehouse, attrs \\ %{}),
     do: Warehouse.changeset(warehouse, attrs)
@@ -57,7 +93,7 @@ defmodule FoodVault.Warehouses do
     end
   end
 
-  @doc "倉庫をアーカイブする。在庫があれば `{:error, :has_stock}`。"
+  @doc "倉庫をアーカイブする。デフォルトなら `{:error, :default_warehouse}`、在庫があれば `{:error, :has_stock}`。"
   def archive_warehouse(scope, %Warehouse{} = warehouse) do
     with :ok <- authorize(scope), do: Repo.transact(fn -> do_archive(warehouse.id) end)
   end
@@ -67,6 +103,7 @@ defmodule FoodVault.Warehouses do
 
     cond do
       Warehouse.archived?(warehouse) -> {:ok, warehouse}
+      Warehouse.default?(warehouse) -> {:error, :default_warehouse}
       Inventories.warehouse_has_stock?(warehouse.id) -> {:error, :has_stock}
       true -> warehouse |> Warehouse.archive_changeset() |> Repo.update()
     end

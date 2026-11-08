@@ -2,7 +2,8 @@ defmodule FoodShip.ShippingSlipsFixtures do
   @moduledoc """
   `FoodShip.ShippingSlips` のテスト用データ。公開 API 経由で作る。
 
-  伝票は `pending` で作る(在庫 API は呼ばない)。既定は、標準 2 箱・バラ 12 個の商品を
+  伝票は `pending` で作る(引当は呼ばない。ただし、在庫のデフォルト倉庫の取得は走るので、
+  使うテストは `setup` で `FoodShip.InventoryStub.stub_defaults/0` を呼んでおく)。既定は、標準 2 箱・バラ 12 個の商品を
   3 件(総バラ数 36・箱数 6)。
   """
 

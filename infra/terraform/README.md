@@ -113,7 +113,7 @@ git push origin origin/main:refs/heads/dev
 | :-- | :-- |
 | Cloud Run の ingress | `internal-and-cloud-load-balancing`。`*.run.app` へ外部から直接は届かない |
 | 在庫 API | Cloud Armor で `/api` を外部から遮断。発送は egress を全トラフィック VPC 経由にし、在庫の `*.run.app` を内部トラフィックとして呼ぶ(`INVENTORY_API_BASE_URL`)。認証は Bearer トークン(Secret Manager `inventory-api-token`) |
-| 発送の対象倉庫 | `inventory_warehouse_id` は初回は空のままでよい(発送は空でも起動するが、設定するまで伝票登録・再引当・数量変更を拒否し、画面に警告を出す)。在庫を構築・初期管理者でマスタ(倉庫)を作ったあと、在庫 API(`GET /api/v1/warehouses`、Bearer トークン)で倉庫の ID を確認し、`terraform.tfvars` に設定して `apply` する |
+| 発送の対象倉庫 | 環境変数・Terraform 変数では指定しない。在庫の「デフォルト倉庫」を発送が在庫 API(`GET /api/v1/warehouses`)で取得して引き当てる。**デプロイ後は未設定**で、設定するまで発送は伝票登録・再引当・数量変更を拒否し、画面に警告を出す。初期管理者で在庫にログインし、倉庫を登録して倉庫一覧の「デフォルトにする」で設定する |
 | 発送のインターネット接続 | egress が全トラフィック VPC のため、外部へは出られない。必要になったら Cloud NAT を追加する |
 | Cloud SQL | プライベート IP のみ。1 インスタンスに DB `food_vault` / `food_ship`(ユーザーも別)。既定は共有コア最小の `db-f1-micro`(SLA 対象外・接続数が少ない。不足したら `db_tier` を `db-g1-small` などへ。変更時は再起動が入る) |
 | HTTP(80) | 待ち受けない(コスト削減)。必ず `https://` で開く |

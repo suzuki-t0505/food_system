@@ -347,9 +347,62 @@ defmodule FoodShip.Inventory.ClientTest do
     end
   end
 
-  describe "warehouse_id/0" do
-    test "設定値を返す" do
-      assert Client.warehouse_id() == "01JA0000000000000000000000"
+  describe "default_warehouse_id/1" do
+    test "GET /api/v1/warehouses の is_default の倉庫の ID を返す" do
+      Req.Test.stub(Client, fn conn ->
+        assert conn.method == "GET"
+        assert conn.request_path == "/api/v1/warehouses"
+
+        assert Plug.Conn.get_req_header(conn, "authorization") == [
+                 "Bearer test-inventory-api-token"
+               ]
+
+        InventoryStub.json(conn, 200, %{
+          "warehouses" => [
+            %{"id" => "01JA0000000000000000000009", "is_default" => false},
+            %{"id" => "01JA0000000000000000000001", "is_default" => true}
+          ]
+        })
+      end)
+
+      assert {:ok, "01JA0000000000000000000001"} = Client.default_warehouse_id()
+    end
+
+    test "デフォルト倉庫が無ければ :warehouse_not_configured" do
+      Req.Test.stub(Client, fn conn ->
+        InventoryStub.json(conn, 200, InventoryStub.warehouses(default?: false))
+      end)
+
+      assert {:error, :warehouse_not_configured} = Client.default_warehouse_id()
+    end
+
+    test "倉庫が 1 件も無くても :warehouse_not_configured" do
+      Req.Test.stub(Client, fn conn -> InventoryStub.json(conn, 200, %{"warehouses" => []}) end)
+
+      assert {:error, :warehouse_not_configured} = Client.default_warehouse_id()
+    end
+
+    test "想定外の形の応答は :connection" do
+      Req.Test.stub(Client, fn conn -> InventoryStub.json(conn, 200, %{"unexpected" => true}) end)
+      assert {:error, :connection} = Client.default_warehouse_id()
+
+      Req.Test.stub(Client, fn conn ->
+        InventoryStub.json(conn, 200, %{"warehouses" => [%{"is_default" => true}]})
+      end)
+
+      assert {:error, :connection} = Client.default_warehouse_id()
+    end
+
+    test "401 は :unauthorized" do
+      Req.Test.stub(Client, fn conn -> InventoryStub.error(conn, 401, "unauthorized") end)
+
+      assert {:error, :unauthorized} = Client.default_warehouse_id()
+    end
+
+    test "通信失敗は :connection。retry: false なら 1 回で諦める" do
+      Req.Test.expect(Client, 1, &InventoryStub.timeout/1)
+
+      assert {:error, :connection} = Client.default_warehouse_id(retry: false)
     end
   end
 

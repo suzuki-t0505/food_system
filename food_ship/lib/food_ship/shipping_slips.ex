@@ -83,8 +83,15 @@ defmodule FoodShip.ShippingSlips do
   defp filter_status(query, :unpacked), do: where(query, [s], s.status in ^@unpacked)
   defp filter_status(query, :shortage), do: where(query, [s], s.status == :shortage)
 
-  @doc "対象倉庫が設定されているか。未設定の間は登録・再引当・数量変更を受け付けない。"
-  def warehouse_configured?, do: not is_nil(InventoryClient.warehouse_id())
+  @doc """
+  対象倉庫(在庫側のデフォルト倉庫)が設定されているか。未設定の間は登録・再引当・数量変更を受け付けない。
+
+  画面の表示のたびに呼ぶので、在庫 API はリトライなしで呼ぶ。通信に失敗したときは、未設定とは
+  断定できないので `true`(警告を出さない)。操作の側で通信エラーが表示される。
+  """
+  def warehouse_configured? do
+    InventoryClient.default_warehouse_id(retry: false) != {:error, :warehouse_not_configured}
+  end
 
   @doc "フォーム用の changeset。登録(`id` なし)は計算値を入れて検証する。"
   def change_shipping_slip(slip, attrs \\ %{})
@@ -142,11 +149,12 @@ defmodule FoodShip.ShippingSlips do
   `attrs`: `client_id`・`shipping_item_id`・`scheduled_ship_date`・`order_count`・
   `client_slip_no`(任意)・`box_count`(任意。省略時は件数 × 標準箱数)。出庫総数量・最低許容期限日は
   マスタから計算する。発注元・発送商品がアーカイブ済みなら changeset エラー。
-  `{:error, :warehouse_not_configured}` のときは保存しない。
+  デフォルト倉庫が未設定(`{:error, :warehouse_not_configured}`)・在庫 API に接続できない
+  (`{:error, :connection}` など)のときは保存しない。
   """
   def create_shipping_slip(scope, attrs) do
     with :ok <- authorize(scope, :manage_shipping_slips),
-         :ok <- ensure_warehouse() do
+         {:ok, _warehouse_id} <- ensure_warehouse() do
       {attrs, client, item} = build_attrs(attrs)
 
       attrs = Map.put(attrs, "created_by_user_id", scope.user.id)
@@ -171,7 +179,7 @@ defmodule FoodShip.ShippingSlips do
   """
   def update_shipping_slip(scope, %ShippingSlip{id: id}, attrs) do
     with :ok <- authorize(scope, :manage_shipping_slips),
-         :ok <- ensure_warehouse() do
+         {:ok, _warehouse_id} <- ensure_warehouse() do
       Repo.transact(fn -> update_unpacked(lock_slip(id), attrs) end)
     end
   end
@@ -201,15 +209,18 @@ defmodule FoodShip.ShippingSlips do
   戻り値は `{:ok, slip, info}`(`slip.status` は `allocated` / `shortage` / `pending` /
   突合した `packed`。`info.errors` は 422 `validation_failed` の内容)、または
   `{:error, :invalid_status | :stale | :forbidden | :warehouse_not_configured}`。
+
+  引当先は、在庫側のデフォルト倉庫(呼び出しのたびに取得する)。取得に失敗したとき
+  (`{:error, :connection | :unauthorized}`)は、伝票の状態を変えずにエラーを返す。
   """
   def allocate_shipping_slip(scope, %ShippingSlip{id: id}) do
     with :ok <- authorize(scope, :manage_shipping_slips),
-         :ok <- ensure_warehouse(),
+         {:ok, warehouse_id} <- ensure_warehouse(),
          {:ok, {slip, remote?}} <- claim(id, [:pending, :shortage], &recompute_expiration/1) do
       operator = scope.user.email
 
       with {:ok, slip} <- release_for_allocation(scope, slip, remote?, operator) do
-        allocate_remote(slip, operator)
+        allocate_remote(slip, warehouse_id, operator)
       end
     end
   end
@@ -242,9 +253,9 @@ defmodule FoodShip.ShippingSlips do
     end
   end
 
-  defp allocate_remote(slip, operator) do
+  defp allocate_remote(slip, warehouse_id, operator) do
     params = %{
-      warehouse_id: InventoryClient.warehouse_id(),
+      warehouse_id: warehouse_id,
       shipment_date: slip.scheduled_ship_date,
       external_slip_id: slip.id,
       operator: operator,
@@ -619,9 +630,8 @@ defmodule FoodShip.ShippingSlips do
     Repo.preload(slip, [:client, :shipping_item, allocated_lots: lots], force: true)
   end
 
-  defp ensure_warehouse do
-    if InventoryClient.warehouse_id(), do: :ok, else: {:error, :warehouse_not_configured}
-  end
+  # 在庫側のデフォルト倉庫の ID。`{:ok, id}` か、`{:error, :warehouse_not_configured | :connection | ...}`
+  defp ensure_warehouse, do: InventoryClient.default_warehouse_id()
 
   defp authorize(scope, action), do: Permission.authorize(scope.user, action)
 

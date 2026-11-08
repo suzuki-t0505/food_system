@@ -9,11 +9,16 @@ defmodule FoodShipWeb.ShippingSlipLive.IndexTest do
   import Phoenix.LiveViewTest
 
   alias FoodShip.{InventoryStub, Repo, ShippingSlips}
-  alias FoodShip.Inventory.Client, as: InventoryClient
   alias FoodShip.ShippingSlips.ShippingSlip
   alias FoodShip.Utils.ConvertDatetime
 
   setup {Req.Test, :set_req_test_from_context}
+
+  # 画面の表示・伝票の作成では、在庫のデフォルト倉庫の取得が走る
+  setup do
+    InventoryStub.stub_defaults()
+    :ok
+  end
 
   @orders "/api/v1/shipment_orders"
   @date ~D[2026-11-20]
@@ -288,14 +293,22 @@ defmodule FoodShipWeb.ShippingSlipLive.IndexTest do
       refute has_element?(lv, "#{row(slip)}.bg-warning\\/20")
     end
 
-    test "対象倉庫が未設定なら警告を出す", %{conn: conn} do
-      previous = Application.get_env(:food_ship, InventoryClient)
-      Application.put_env(:food_ship, InventoryClient, Keyword.put(previous, :warehouse_id, nil))
-      on_exit(fn -> Application.put_env(:food_ship, InventoryClient, previous) end)
+    test "デフォルト倉庫が未設定なら警告を出す", %{conn: conn} do
+      InventoryStub.routes([
+        {"GET", "/api/v1/warehouses", &InventoryStub.without_default_warehouse/1}
+      ])
 
       {:ok, lv, _} = live(conn, ~p"/shipping_slips?date=#{@date_param}")
 
       assert has_element?(lv, "#warehouse-warning", "対象倉庫が設定されていません。")
+    end
+
+    test "在庫 API に接続できないときは、未設定の警告を出さない", %{conn: conn} do
+      InventoryStub.routes([{"GET", "/api/v1/warehouses", &InventoryStub.timeout/1}])
+
+      {:ok, lv, _} = live(conn, ~p"/shipping_slips?date=#{@date_param}")
+
+      refute has_element?(lv, "#warehouse-warning")
     end
 
     test "日付の入力で、その日のタブへ移動する", %{conn: conn, scope: scope} do
