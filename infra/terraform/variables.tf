@@ -42,9 +42,9 @@ variable "initial_admin_email" {
 }
 
 variable "db_tier" {
-  description = "Cloud SQL のマシンタイプ"
+  description = "Cloud SQL のマシンタイプ(共有コアの最小。不足したら db-g1-small や db-custom-1-3840 へ)"
   type        = string
-  default     = "db-custom-1-3840"
+  default     = "db-f1-micro"
 }
 
 variable "deletion_protection" {

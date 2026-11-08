@@ -64,7 +64,7 @@ flowchart LR
 
 | 項目 | 決定 |
 | :-- | :-- |
-| TLS 終端 | 外部アプリケーション LB（Google マネージド証明書）。HTTP は HTTPS へ 301。`force_ssl` は LB の `X-Forwarded-Proto` で満たす |
+| TLS 終端 | 外部アプリケーション LB（Google マネージド証明書）。HTTP(80)は待ち受けない(`https://` で開く)。`force_ssl` は LB の `X-Forwarded-Proto` で満たす |
 | Cloud Run | アプリごとに 1 サービス。ingress は `internal-and-cloud-load-balancing`（`*.run.app` へ外部から直接届かない） |
 | 在庫 `/api` の送信元制限 | Cloud Armor で LB 経由の `/api` を 403。発送は egress を全トラフィック VPC 経由にし、在庫の `*.run.app` を内部トラフィックとして呼ぶ（`INVENTORY_API_BASE_URL`）。認証は従来どおりサービストークン |
 | Cloud Armor | `/api` 遮断、OWASP 事前構成ルール（感度 1）、IP ごとのレート制限、送信元 CIDR の許可リスト（任意） |
