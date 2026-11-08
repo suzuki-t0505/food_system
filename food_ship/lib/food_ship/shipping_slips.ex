@@ -29,7 +29,6 @@ defmodule FoodShip.ShippingSlips do
   alias FoodShip.Repo
   alias FoodShip.ShippingItems.ShippingItem
   alias FoodShip.ShippingSlips.{AllocationResult, ShippingSlip, SlipAllocatedLot}
-  alias FoodShip.TotalPicks
   alias FoodShip.Utils.{Calc, Permission}
 
   @unpacked [:pending, :allocated, :shortage]
@@ -45,8 +44,7 @@ defmodule FoodShip.ShippingSlips do
   出荷予定日の伝票(`slip_no` 昇順。発注元・発送商品・引当ロットを preload 済み)。
 
   `filter`: `:all`(すべて)・`:unpacked`(梱包前 = `pending` / `allocated` / `shortage`)・
-  `:shortage`(在庫不足のみ)・`:unpicked`(未ピックの引当済み = `allocated` かつトータルピックに
-  紐づいていない)。
+  `:shortage`(在庫不足のみ)。
   """
   def list_shipping_slips(%Date{} = date, filter \\ :all) do
     ShippingSlip
@@ -84,9 +82,6 @@ defmodule FoodShip.ShippingSlips do
   defp filter_status(query, :all), do: query
   defp filter_status(query, :unpacked), do: where(query, [s], s.status in ^@unpacked)
   defp filter_status(query, :shortage), do: where(query, [s], s.status == :shortage)
-
-  defp filter_status(query, :unpicked),
-    do: where(query, [s], s.status == :allocated and is_nil(s.total_pick_id))
 
   @doc "対象倉庫が設定されているか。未設定の間は登録・再引当・数量変更を受け付けない。"
   def warehouse_configured?, do: not is_nil(InventoryClient.warehouse_id())
@@ -173,9 +168,6 @@ defmodule FoodShip.ShippingSlips do
 
   数量・最低許容期限日は現在のマスタで再計算する。**旧オーダー(`inventory_order_id`・引当ロット)は
   残す**。呼び出し側は続けて `allocate_shipping_slip/2` を実行する(旧オーダーの照会・解除 → 再引当)。
-
-  トータルピックに紐づいていた伝票は、同じトランザクションでピックから外し、ピックを
-  要再発行(`outdated`。紐づく伝票が無くなれば `cancelled`)にする。
   """
   def update_shipping_slip(scope, %ShippingSlip{id: id}, attrs) do
     with :ok <- authorize(scope, :manage_shipping_slips),
@@ -187,19 +179,9 @@ defmodule FoodShip.ShippingSlips do
   defp update_unpacked(%ShippingSlip{status: status} = slip, attrs) when status in @unpacked do
     {attrs, _item} = build_update_attrs(slip, attrs)
 
-    # 引当が外れる(`pending` に戻る)ので、トータルピックからも外す
-    changeset =
-      slip
-      |> ShippingSlip.update_changeset(attrs)
-      |> Ecto.Changeset.put_change(:total_pick_id, nil)
-
-    case Repo.update(changeset) do
-      {:ok, updated} ->
-        :ok = TotalPicks.release(Repo, slip)
-        {:ok, preload_slip(updated)}
-
-      {:error, changeset} ->
-        {:error, changeset}
+    case slip |> ShippingSlip.update_changeset(attrs) |> Repo.update() do
+      {:ok, slip} -> {:ok, preload_slip(slip)}
+      {:error, changeset} -> {:error, changeset}
     end
   end
 
@@ -378,9 +360,6 @@ defmodule FoodShip.ShippingSlips do
   オーダーを解除してから `cancelled`(`cancelled_at`・`cancelled_by_user_id`)にする。
   解除に失敗したらローカルは変えず `{:error, reason}`(再度取消できる)。在庫側が出庫済みなら
   `{:error, {:remote_state, :shipped}}`(梱包完了で状態を合わせる)。
-
-  トータルピックに紐づいていた伝票は、同じトランザクションでピックから外し、ピックを
-  要再発行(`outdated`。紐づく伝票が無くなれば `cancelled`)にする。
   """
   def cancel_shipping_slip(scope, %ShippingSlip{id: id}) do
     with :ok <- authorize(scope, :manage_shipping_slips),
@@ -390,7 +369,6 @@ defmodule FoodShip.ShippingSlips do
         status: :cancelled,
         cancelled_at: DateTime.utc_now(:second),
         cancelled_by_user_id: scope.user.id,
-        total_pick_id: nil,
         inventory_order_id: nil,
         shortage_pieces: nil,
         allocation_error: nil
@@ -500,13 +478,11 @@ defmodule FoodShip.ShippingSlips do
 
   # 確保した時点(`status`・`allocation_attempted_at`)のままの行にだけ `attrs` を反映する。
   # `lots` は `:keep`(引当ロットを変えない)か `{:replace, lots}`(旧行を削除して新行を保存)。
-  # `attrs` に `total_pick_id: nil` を含むとき(取消)は、トータルピックからも外す(ピックは `release/2`)。
   defp apply_outcome(%ShippingSlip{} = slip, attrs, lots) do
     attrs = Map.put(attrs, :updated_at, DateTime.utc_now(:second))
 
     multi =
       Multi.new()
-      |> lock_pick_link(slip, attrs)
       |> Multi.run("update_slip", fn repo, _changes ->
         {count, _} =
           ShippingSlip
@@ -516,7 +492,6 @@ defmodule FoodShip.ShippingSlips do
 
         if count == 1, do: {:ok, count}, else: {:error, :stale}
       end)
-      |> release_pick(attrs)
       |> replace_lots(slip, lots)
 
     case Repo.transact(multi) do
@@ -524,33 +499,6 @@ defmodule FoodShip.ShippingSlips do
       {:error, "update_slip", :stale, _changes} -> {:error, :stale}
     end
   end
-
-  # 伝票を `FOR UPDATE` で読み直し、今の `total_pick_id` を控える。確保したあとにピックへ
-  # 紐づけられた可能性があるため、確保時の構造体ではなくここで読む(ロック順序は伝票 → ピック)
-  defp lock_pick_link(multi, slip, %{total_pick_id: nil}) do
-    Multi.run(multi, "locked_pick_id", fn repo, _changes ->
-      pick_id =
-        repo.one(
-          from s in ShippingSlip,
-            where: s.id == ^slip.id,
-            lock: "FOR UPDATE",
-            select: s.total_pick_id
-        )
-
-      {:ok, pick_id}
-    end)
-  end
-
-  defp lock_pick_link(multi, _slip, _attrs), do: multi
-
-  defp release_pick(multi, %{total_pick_id: nil}) do
-    Multi.run(multi, "release_pick", fn repo, %{"locked_pick_id" => pick_id} ->
-      :ok = TotalPicks.release(repo, %{total_pick_id: pick_id})
-      {:ok, pick_id}
-    end)
-  end
-
-  defp release_pick(multi, _attrs), do: multi
 
   defp where_attempted_at(query, nil), do: where(query, [s], is_nil(s.allocation_attempted_at))
   defp where_attempted_at(query, at), do: where(query, [s], s.allocation_attempted_at == ^at)
@@ -668,7 +616,7 @@ defmodule FoodShip.ShippingSlips do
 
   defp preload_slip(slip) do
     lots = from(l in SlipAllocatedLot, order_by: [asc: l.expiration_date, asc: l.id])
-    Repo.preload(slip, [:client, :shipping_item, :total_pick, allocated_lots: lots], force: true)
+    Repo.preload(slip, [:client, :shipping_item, allocated_lots: lots], force: true)
   end
 
   defp ensure_warehouse do

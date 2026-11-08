@@ -76,9 +76,5 @@ config :phoenix_live_view,
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
 
-# 開発環境(docker-compose は root で動く)に限り、Chromium のサンドボックスを無効にする。
-# 本番は設定しない(architecture §10.2)
-config :food_ship, FoodShip.Utils.Pdf, no_sandbox: true
-
 # 未定義のログカテゴリは例外にする (本番は false)
 config :food_ship, FoodShip.Utils.Logger, raise_on_unknown_category: true

@@ -11,7 +11,6 @@ defmodule FoodShipWeb.ShippingSlipLive.Form do
 
   alias FoodShip.{Clients, ShippingItems, ShippingSlips}
   alias FoodShip.ShippingSlips.ShippingSlip
-  alias FoodShip.TotalPicks.TotalPick
   alias FoodShip.Utils.{ConvertDatetime, Permission}
   alias FoodShipWeb.SlipMessages
 
@@ -327,19 +326,10 @@ defmodule FoodShipWeb.ShippingSlipLive.Form do
 
   defp confirm_message(:new, _slip), do: nil
 
-  defp confirm_message(:edit, %ShippingSlip{status: :allocated} = slip),
-    do:
-      "件数・出荷予定日を変更します。在庫不足の場合、現在の引当は解除されます。" <>
-        pick_note(slip) <> "よろしいですか?"
+  defp confirm_message(:edit, %ShippingSlip{status: :allocated}),
+    do: "件数・出荷予定日を変更します。在庫不足の場合、現在の引当は解除されます。よろしいですか?"
 
-  defp confirm_message(:edit, slip),
-    do: "件数・出荷予定日を変更します。" <> pick_note(slip) <> "よろしいですか?"
-
-  # ピックに紐づく伝票は、変更するとピックから外れて再発行が必要になる
-  defp pick_note(%ShippingSlip{total_pick: %TotalPick{} = pick}),
-    do: "トータルピック #{TotalPick.pick_no_label(pick)} から外れ、再発行が必要になります。"
-
-  defp pick_note(_slip), do: ""
+  defp confirm_message(:edit, _slip), do: "件数・出荷予定日を変更します。よろしいですか?"
 
   defp back_path(%ShippingSlip{scheduled_ship_date: %Date{} = date}),
     do: ~p"/shipping_slips?#{%{date: Date.to_iso8601(date)}}"

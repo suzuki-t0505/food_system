@@ -19,7 +19,7 @@ food_system/
 ├── .steering/                 # 作業単位のドキュメント（作業ごとに作成）［計画］
 ├── mock/                      # HTML モック（create-mock スキルの出力）［計画］
 ├── food_vault/                # 在庫管理システム（Phoenix アプリ）［現状：雛形］
-├── food_ship/                 # 発送システム（Phoenix アプリ）［現状：段階 4（P0）と、段階 5 のトータルピック・PDF 帳票（F-S6）まで実装］
+├── food_ship/                 # 発送システム（Phoenix アプリ）［現状：段階 4（P0）まで実装］
 ├── .github/workflows/         # ci.yml（PR の品質ゲート）・deploy-dev.yml（dev ブランチへの push で自動デプロイ）［現状］
 ├── infra/terraform/           # GCP 基盤の Terraform（§1.2）［現状］
 ├── .claude/                   # Claude Code の設定・エージェント・スキル［現状］
@@ -233,21 +233,20 @@ lib/
 │   ├── clients.ex  /  clients/client.ex                       # ［現状］発注元（スキーマのモジュール名は FoodShip.Clients.Client）
 │   ├── shipping_items.ex  /  shipping_items/shipping_item.ex  # ［現状］在庫側の商品の取得・再取得を含む
 │   ├── expiration_rules.ex  /  expiration_rules/expiration_rule.ex   # ［現状］
-│   ├── shipping_slips.ex               # Context: 登録・引当・再引当・梱包・取消・数量変更［現状］（CSV 取込・一括再引当は段階 5 の別作業）
+│   ├── shipping_slips.ex               # Context: 登録・引当・再引当・梱包・取消・数量変更［現状］（CSV 取込は段階 5）
 │   ├── shipping_slips/
 │   │   ├── shipping_slip.ex            # ［現状］
 │   │   ├── slip_allocated_lot.ex       # ［現状］
 │   │   ├── allocation_result.ex        # 在庫 API の応答 → 伝票への反映内容（純粋関数）［現状］
-│   │   └── csv_import.ex               # CSV の検証・パース（Schema ではない補助モジュール）［計画：段階 5 の F-S5］
-│   ├── total_picks.ex                  # Context: 作成・再発行・取消・集計クエリ・release/2（伝票がピックから外れたときの更新）［現状：段階 5（F-S6）］
-│   ├── total_picks/total_pick.ex       # ［現状：段階 5］
+│   │   └── csv_import.ex               # CSV の検証・パース（Schema ではない補助モジュール）［計画：段階 5］
+│   ├── total_picks.ex                  # Context: 作成・再発行・取消・集計クエリ［計画：段階 5］
+│   ├── total_picks/total_pick.ex
 │   ├── inventory/
 │   │   └── client.ex                   # 在庫 API クライアント（Req）。外部 I/O 境界［現状］
 │   └── utils/
 │       ├── permission.ex / logger.ex / operation_log.ex / convert_datetime.ex   # ［現状］
 │       ├── calc.ex                     # 箱数・出庫総数量・最低許容期限日の計算［現状］
-│       └── pdf.ex                      # PDF 生成の境界。アダプタへ委譲［現状：段階 5］
-│       └── pdf/{chromic,fake}.ex       # ChromicPDF（本番・開発）／Fake（テスト）［現状：段階 5］
+│       └── pdf.ex                      # PDF 生成（ChromicPDF）の境界［計画：段階 5］
 └── food_ship_web/
     ├── endpoint.ex / router.ex / telemetry.ex / gettext.ex   # ［現状］
     ├── user_auth.ex                    # ［現状：段階 1 で実装済み］
@@ -256,16 +255,16 @@ lib/
     ├── plugs/logger_metadata.ex        # Logger メタデータに remote_ip を設定
     ├── components/                     # core_components.ex は改変しない
     │   ├── master_components.ex        # アーカイブ済みバッジなど［現状］
-    │   └── slip_components.ex          # 状態バッジ・ピック状態バッジ・引当ロット表示・ページ送り［現状］
+    │   └── slip_components.ex          # 状態バッジ・引当ロット表示［現状］
     ├── controllers/
-    │   ├── report_controller.ex        # total_pick/2・work_order/2・total_pick_bundle/2［現状：段階 5］
-    │   ├── report_html.ex  /  report_html/*.heex   # 帳票テンプレート（A4 縦。pick_sheet・work_order_sheet）［現状：段階 5］
+    │   ├── report_controller.ex        # total_pick/2・work_order/2・total_pick_bundle/2［計画：段階 5］
+    │   ├── report_html.ex  /  report_html/*.heex   # 帳票テンプレート（A4 縦）［計画：段階 5］
     │   └── error_*.ex / page_controller.ex   # ［現状］`/` は作業画面へ redirect
     └── live/
         ├── user_session_live/          # ログイン・パスワード変更［現状］
-        ├── shipping_slip_live/         # 出荷日別の作業画面（index.ex）／伝票登録・数量変更（form.ex）［現状］。CSV 取込は段階 5 の別作業。ピック番号・未ピックのみ・作成ダイアログ・作業指示書リンクを含む［現状］
+        ├── shipping_slip_live/         # 出荷日別の作業画面（index.ex）／伝票登録・数量変更（form.ex）［現状］。CSV 取込は段階 5
         ├── client_live/ shipping_item_live/ expiration_rule_live/   # マスタの参照一覧（index.ex）［現状］
-        ├── total_pick_live/            # 一覧・詳細（index.ex / show.ex）［現状：段階 5］
+        ├── total_pick_live/            # 一覧・詳細（index.ex / show.ex）［計画：段階 5］
         └── management/                 # admin 専用
             ├── client_live/ shipping_item_live/ expiration_rule_live/   # マスタの編集（form.ex）［現状］
             └── user_live/              # ユーザー管理（index.ex / form.ex）［現状］
@@ -277,8 +276,8 @@ lib/
 | :-- | :-- | :-- |
 | 1 | `create_users_auth_tables` | `citext` 拡張、`users`、`users_tokens` |
 | 2 | `create_clients_shipping_items_expiration_rules` | マスタ 3 テーブル［現状］ |
-| 3 | `create_shipping_slips` | `slip_no` のシーケンス、CHECK 制約、部分ユニーク、`slip_allocated_lots`（表示用キャッシュ）［現状］ |
-| 4 | `create_total_picks` | `pick_no` のシーケンス、CHECK 制約、`shipping_slips.total_pick_id`（NULL 可・索引・CHECK `total_pick_only_when_picked`）の追加［現状：段階 5］ |
+| 3 | `create_shipping_slips` | `slip_no` のシーケンス、CHECK 制約、部分ユニーク、`slip_allocated_lots`（表示用キャッシュ）［現状。`total_pick_id` 列は段階 5 で追加］ |
+| 4 | `create_total_picks`（予定） | `pick_no` のシーケンス、`shipping_slips.total_pick_id` の追加［段階 5］ |
 
 ### 4.3 `test/`
 
@@ -290,14 +289,13 @@ test/
 │   ├── inventory/client_test.exs        # Req.Test のスタブで応答別に検証［現状］
 │   ├── shipping_slips_test.exs / shipping_slips_concurrency_test.exs   # ［現状］
 │   ├── clients_test.exs / shipping_items_test.exs / expiration_rules_test.exs   # ［現状］
-│   ├── total_picks_test.exs / total_picks_concurrency_test.exs / shipping_slips_pick_test.exs   # ［現状：段階 5］
+│   ├── total_picks_test.exs            # ［計画：段階 5］
 │   └── shipping_slips/csv_import_test.exs   # ［計画：段階 5］
-├── food_ship/utils/pdf_test.exs         # Fake と、実 Chromium（@tag :pdf。PDF_TEST=1 のときだけ）［現状：段階 5］
-├── food_ship_web/controllers/report_controller_test.exs   # Utils.Pdf を Fake に差し替え。実 Chromium の確認は @tag :pdf［現状：段階 5］
+├── food_ship_web/controllers/report_controller_test.exs   # Utils.Pdf のみモック［計画：段階 5］
 └── support/
     ├── inventory_stub.ex               # 在庫 API の Req.Test スタブ（応答の組み立て・routes/1・calls/0）［現状］
     ├── concurrency_case.ex             # 実コミットの並行性テスト用ケース（在庫側と同形）［現状］
-    └── fixtures/{accounts,masters,shipping_slips,total_picks}_fixtures.ex   # Context の公開 API 経由［現状］
+    └── fixtures/{accounts,masters,shipping_slips}_fixtures.ex   # Context の公開 API 経由［現状］
 ```
 
 ---

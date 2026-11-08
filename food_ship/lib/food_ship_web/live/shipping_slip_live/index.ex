@@ -3,40 +3,25 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
   作業画面(出荷予定日別の伝票一覧)。全ロールが参照でき、操作は `staff` 以上。
 
   出荷予定日ごとのタブ(残件数 = `pending` / `allocated` / `shortage` の合計)と、状態フィルタ
-  (すべて／未梱包のみ／在庫不足のみ／未ピックのみ)を持つ。各伝票には、引当ロットの「期限日 × 個数」を表示する。
+  (すべて／未梱包のみ／在庫不足のみ)を持つ。各伝票には、引当ロットの「期限日 × 個数」を表示する。
   `pending` の行には、引当エラーの種別(一時／恒久)と最終試行日時を表示する。
 
   梱包完了(在庫側の出庫確定)と箱数の修正は `staff` 以上。箱数は梱包前の伝票でインライン編集できる
   (在庫数には影響しない)。在庫 API を呼ぶ操作(再引当・取消・梱包完了)は `Task` ＋ `handle_info` で非同期に行い、実行中の伝票の
   行・ボタンを無効化する(`busy`)。操作ログは結果を受ける `handle_info` の成功節で出す。
-
-  トータルピックは、出荷予定日のタブの「トータルピック作成」から、未ピックの引当済み伝票を
-  「発注元 × メーカー」のグループで選んで作る(DB だけの処理なので同期で行う)。各伝票には
-  ピック番号(詳細へのリンク)と作業指示書 PDF のリンクを出す。
   """
 
   use FoodShipWeb, :live_view
 
   import FoodShipWeb.SlipComponents
 
-  alias FoodShip.{ShippingSlips, TotalPicks}
+  alias FoodShip.ShippingSlips
   alias FoodShip.ShippingSlips.ShippingSlip
-  alias FoodShip.TotalPicks.TotalPick
   alias FoodShip.Utils.{ConvertDatetime, Permission}
   alias FoodShipWeb.SlipMessages
 
-  @filters %{
-    "all" => :all,
-    "unpacked" => :unpacked,
-    "shortage" => :shortage,
-    "unpicked" => :unpicked
-  }
-  @filter_options [
-    all: "すべて",
-    unpacked: "未梱包のみ",
-    shortage: "在庫不足のみ",
-    unpicked: "未ピックのみ"
-  ]
+  @filters %{"all" => :all, "unpacked" => :unpacked, "shortage" => :shortage}
+  @filter_options [all: "すべて", unpacked: "未梱包のみ", shortage: "在庫不足のみ"]
   # 作業画面のタブに出す、過去の出荷予定日の範囲(日)
   @past_days 7
 
@@ -47,15 +32,6 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
       <.header>
         作業画面
         <:actions>
-          <button
-            :if={@can_pick}
-            type="button"
-            phx-click="open_pick_dialog"
-            class="btn"
-            id="open-pick-dialog"
-          >
-            トータルピック作成
-          </button>
           <.link
             :if={@can_manage}
             navigate={~p"/shipping_slips/new"}
@@ -75,58 +51,6 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
       >
         対象倉庫が設定されていません。管理者に連絡してください。
       </div>
-
-      <dialog
-        :if={@pick_groups}
-        id="pick-dialog"
-        class="modal modal-open"
-        aria-labelledby="pick-title"
-      >
-        <div class="modal-box">
-          <h3 id="pick-title" class="text-lg font-bold">トータルピック作成（{@date}）</h3>
-          <p :if={@pick_groups == []} class="py-4 text-sm" id="no-pick-candidates">
-            未ピックの引当済み伝票はありません。
-          </p>
-          <form
-            :if={@pick_groups != []}
-            id="pick-form"
-            phx-submit="create_picks"
-            class="space-y-3 py-2"
-          >
-            <p class="text-sm">作成するグループ（発注元 × メーカー）を選んでください。</p>
-            <label
-              :for={group <- @pick_groups}
-              class="flex items-start gap-2"
-              id={"pick-group-#{group.client_id}-#{group.inventory_maker_id}"}
-            >
-              <input
-                type="checkbox"
-                name="groups[]"
-                value={"#{group.client_id}:#{group.inventory_maker_id}"}
-                class="checkbox checkbox-sm mt-1"
-                checked
-              />
-              <span class="text-sm">
-                {group.client_name} / {group.maker_name}
-                <span class="block text-xs">
-                  伝票 {group.slip_count} 件・商品 {group.item_count} 種類・合計 {group.total_pieces} バラ
-                </span>
-              </span>
-            </label>
-            <div class="modal-action">
-              <button type="button" phx-click="close_pick_dialog" class="btn" id="close-pick-dialog">
-                閉じる
-              </button>
-              <button class="btn btn-primary" id="create-picks">作成する</button>
-            </div>
-          </form>
-          <div :if={@pick_groups == []} class="modal-action">
-            <button type="button" phx-click="close_pick_dialog" class="btn" id="close-pick-dialog">
-              閉じる
-            </button>
-          </div>
-        </div>
-      </dialog>
 
       <div role="tablist" class="tabs tabs-box flex-wrap" id="ship-date-tabs">
         <.link
@@ -171,9 +95,8 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
               <th class="text-right">箱数</th>
               <th class="text-right">バラ数</th>
               <th>ピッキング対象(期限日 × 個数)</th>
-              <th>ピック</th>
               <th>状態</th>
-              <th :if={@can_manage or @can_pack or @can_pick}></th>
+              <th :if={@can_manage or @can_pack}></th>
             </tr>
           </thead>
           <tbody>
@@ -221,18 +144,6 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
               </td>
               <td class="text-right">{slip.total_piece_qty}</td>
               <td><.allocated_lots lots={slip.allocated_lots} /></td>
-              <td class="whitespace-nowrap" id={"pick-of-#{slip.id}"}>
-                <.link
-                  :if={slip.total_pick}
-                  navigate={~p"/total_picks/#{slip.total_pick.id}"}
-                  class="link"
-                >
-                  {TotalPick.pick_no_label(slip.total_pick)}
-                </.link>
-                <span :if={slip.total_pick && slip.total_pick.status == :outdated} class="block">
-                  <.pick_status_badge status={:outdated} />
-                </span>
-              </td>
               <td>
                 <.status_badge status={slip.status} />
                 <span
@@ -255,10 +166,7 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
                 </span>
                 <span :if={MapSet.member?(@busy, slip.id)} class="block text-xs">処理中…</span>
               </td>
-              <td
-                :if={@can_manage or @can_pack or @can_pick}
-                class="space-x-1 text-right whitespace-nowrap"
-              >
+              <td :if={@can_manage or @can_pack} class="space-x-1 text-right whitespace-nowrap">
                 <button
                   :if={@can_pack and slip.status == :allocated}
                   phx-click="pack"
@@ -270,15 +178,6 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
                 >
                   梱包完了
                 </button>
-                <.link
-                  :if={@can_pick and slip.status in [:allocated, :packed]}
-                  href={~p"/reports/work_orders/#{slip.id}"}
-                  target="_blank"
-                  class="btn btn-sm"
-                  id={"work-order-#{slip.id}"}
-                >
-                  作業指示書
-                </.link>
                 <button
                   :if={@can_manage and slip.status in [:pending, :shortage]}
                   phx-click="reallocate"
@@ -302,7 +201,7 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
                   phx-click="cancel"
                   phx-value-id={slip.id}
                   disabled={MapSet.member?(@busy, slip.id)}
-                  data-confirm={cancel_confirm(slip)}
+                  data-confirm="この伝票を取り消します。在庫の引当も解除されます。よろしいですか?"
                   class="btn btn-sm btn-error btn-soft"
                   id={"cancel-#{slip.id}"}
                 >
@@ -311,7 +210,7 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
               </td>
             </tr>
             <tr :if={@slips == []}>
-              <td colspan="10" class="text-center text-sm" id="no-slips">該当する伝票はありません。</td>
+              <td colspan="9" class="text-center text-sm" id="no-slips">該当する伝票はありません。</td>
             </tr>
           </tbody>
         </table>
@@ -329,8 +228,6 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
      |> assign(:busy, MapSet.new())
      |> assign(:can_manage, Permission.can?(user, :manage_shipping_slips))
      |> assign(:can_pack, Permission.can?(user, :pack_shipping_slips))
-     |> assign(:can_pick, Permission.can?(user, :manage_total_picks))
-     |> assign(:pick_groups, nil)
      |> assign(:warehouse_configured, ShippingSlips.warehouse_configured?())}
   end
 
@@ -353,27 +250,6 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
     case Date.from_iso8601(date) do
       {:ok, date} -> {:noreply, push_patch(socket, to: tab_path(date, socket.assigns.filter))}
       _ -> {:noreply, socket}
-    end
-  end
-
-  def handle_event("open_pick_dialog", _params, socket) do
-    if socket.assigns.can_pick do
-      {:noreply, assign(socket, :pick_groups, TotalPicks.list_candidates(socket.assigns.date))}
-    else
-      {:noreply, put_flash(socket, :error, SlipMessages.error_message(:forbidden))}
-    end
-  end
-
-  def handle_event("close_pick_dialog", _params, socket) do
-    {:noreply, assign(socket, :pick_groups, nil)}
-  end
-
-  def handle_event("create_picks", params, socket) do
-    if socket.assigns.can_pick do
-      groups = params |> Map.get("groups", []) |> List.wrap() |> parse_groups()
-      create_picks(socket, groups)
-    else
-      {:noreply, put_flash(socket, :error, SlipMessages.error_message(:forbidden))}
     end
   end
 
@@ -431,57 +307,6 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
     # 失敗でも、他の操作で状態が変わっている可能性があるので、伝票と残件数を読み直す
     {:noreply, socket |> flash_once(kind, message) |> refresh_tabs() |> assign_slips()}
   end
-
-  # DB だけの処理なので、Task にせず同期で作る。成功したら詳細（複数なら一覧）へ移る
-  defp create_picks(socket, groups) do
-    %{current_scope: scope, date: date} = socket.assigns
-
-    case TotalPicks.create_total_picks(scope, date, groups) do
-      {:ok, picks} ->
-        Enum.each(picks, &OperationLog.info(socket, "トータルピックを作成しました。", :create, &1))
-        {:noreply, push_navigate(socket, to: after_create_path(picks, date))}
-
-      {:error, :empty_selection} ->
-        {:noreply, flash_once(socket, :error, "作成するグループを選んでください。")}
-
-      {:error, :no_target} ->
-        # プレビューのあとに他の操作で伝票が変わった。最新の候補を読み直す
-        {:noreply,
-         socket
-         |> assign(:pick_groups, TotalPicks.list_candidates(date))
-         |> flash_once(:error, "対象の伝票が変わりました。もう一度、グループを選んでください。")
-         |> assign_slips()}
-
-      {:error, reason} ->
-        {:noreply, flash_once(socket, :error, SlipMessages.error_message(reason))}
-    end
-  end
-
-  defp after_create_path([pick], _date), do: ~p"/total_picks/#{pick.id}"
-
-  defp after_create_path(_picks, date),
-    do: ~p"/total_picks?#{%{date: Date.to_iso8601(date)}}"
-
-  # "client_id:maker_id" を {client_id, maker_id} にする。不正な値は捨てる
-  defp parse_groups(values) do
-    Enum.flat_map(values, fn value ->
-      with [client_id, maker_id] <- String.split(to_string(value), ":"),
-           {:ok, client_id} when not is_nil(client_id) <- Ecto.Type.cast(Ecto.ULID, client_id),
-           {:ok, maker_id} when not is_nil(maker_id) <- Ecto.Type.cast(Ecto.ULID, maker_id) do
-        [{client_id, maker_id}]
-      else
-        _ -> []
-      end
-    end)
-  end
-
-  # 取消の確認。ピック済みの伝票は、ピックから外れて再発行が必要になることを伝える
-  defp cancel_confirm(%ShippingSlip{total_pick: %TotalPick{} = pick}) do
-    "この伝票を取り消します。在庫の引当も解除されます。" <>
-      "トータルピック #{TotalPick.pick_no_label(pick)} から外れ、再発行が必要になります。よろしいですか?"
-  end
-
-  defp cancel_confirm(_slip), do: "この伝票を取り消します。在庫の引当も解除されます。よろしいですか?"
 
   # 在庫 API を呼ぶ操作を Task で始める。権限は、ボタンの表示とは別にここで検査する
   defp start_action(socket, id, permission, action, fun) do

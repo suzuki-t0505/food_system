@@ -76,11 +76,6 @@ defmodule FoodShipWeb.Router do
       live "/shipping_slips/new", ShippingSlipLive.Form, :new
       live "/shipping_slips/:id/edit", ShippingSlipLive.Form, :edit
     end
-
-    # 帳票(PDF)。LiveView ではなく Controller で配信する。都度生成して保存しない
-    get "/reports/total_picks/:id", ReportController, :total_pick
-    get "/reports/total_picks/:id/bundle", ReportController, :total_pick_bundle
-    get "/reports/work_orders/:id", ReportController, :work_order
   end
 
   ## 全ロール(ログイン済み)
@@ -93,9 +88,6 @@ defmodule FoodShipWeb.Router do
     live_session :require_authenticated_user,
       on_mount: [{FoodShipWeb.UserAuth, :ensure_authenticated}] do
       live "/shipping_slips", ShippingSlipLive.Index, :index
-
-      live "/total_picks", TotalPickLive.Index, :index
-      live "/total_picks/:id", TotalPickLive.Show, :show
 
       live "/masters/clients", ClientLive.Index, :index
       live "/masters/shipping_items", ShippingItemLive.Index, :index

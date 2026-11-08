@@ -70,23 +70,6 @@ if config_env() in [:dev, :prod] do
     retry_base_ms: 1000
 end
 
-# PDF 帳票の実行設定。サンドボックスの無効化(`no_sandbox`)はここでは読まない(dev.exs のみ)
-if config_env() in [:dev, :prod] do
-  pdf_opts =
-    [
-      pool_size: String.to_integer(System.get_env("PDF_POOL_SIZE", "2")),
-      timeout: String.to_integer(System.get_env("PDF_TIMEOUT_MS", "30000"))
-    ]
-
-  pdf_opts =
-    case System.get_env("PDF_CHROME_PATH") do
-      path when path not in [nil, ""] -> Keyword.put(pdf_opts, :chrome_executable, path)
-      _ -> pdf_opts
-    end
-
-  config :food_ship, FoodShip.Utils.Pdf, pdf_opts
-end
-
 if config_env() == :dev do
   # Reload browser tabs when matching files change.
   config :food_ship, FoodShipWeb.Endpoint,
