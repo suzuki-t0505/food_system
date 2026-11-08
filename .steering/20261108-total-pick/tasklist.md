@@ -86,7 +86,7 @@
 
 ## 残課題（今回の範囲外）
 
-- 本番イメージ（`infra/`・Cloud Run）への Chromium・日本語フォントの追加と、非 root での実行（`no_sandbox` を使わない）
+- 本番イメージ（Cloud Run）の PDF: `food_ship/Dockerfile` に `chromium`・`fonts-noto-cjk`・`HOME=/tmp`・`PDF_CHROME_PATH` を追加し、`nobody` で Chromium と日本語フォントが使えることは確認済み（イメージ 407MB）。**未解決**: コンテナではユーザー名前空間が使えず Chromium のサンドボックスが起動しない（`No usable sandbox!`。`chromium-sandbox` を足しても `Failed to move to new namespace`）ため、このイメージのままでは本番の PDF 出力は動かない。方針を決める必要がある（案: `PDF_NO_SANDBOX=true` を Cloud Run だけに明示的に設定し、ChromicPDF の `offline: true`・`nobody` 実行で緩和して architecture §10.2 を「Cloud Run は例外」に改める／本番では PDF を無効にする）。Cloud Run（第 2 世代）での実際の挙動は未検証。あわせて、メモリ 1Gi に対する `PDF_POOL_SIZE`（Terraform の `env`）も決める
 - 束ね PDF の非同期化（実測で 30 秒を超えた場合のみ）
 - 出庫取消（F-S7）から `TotalPicks.release/2` を呼ぶこと
 - CSV 取込・一括再引当（F-S5）、一括梱包完了（F-S8）、緊急操作（F-V8）、倉庫間移動（F-V9）、出庫取消（F-V7／F-S7）
