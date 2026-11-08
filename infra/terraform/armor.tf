@@ -20,6 +20,7 @@ resource "google_compute_security_policy" "this" {
 
   # 在庫 API は外部から使わせない(発送からは VPC 経由で *.run.app を直接呼ぶ)。
   # Plug は空のパス要素を無視し、パス要素を URL デコードするため、"//api" や "%61pi" も対象にする
+  # (Cloud Armor の式には urlDecode() の関数形式が無いため、a/p/i のパーセントエンコードを正規表現で列挙する)
   rule {
     priority    = 100
     action      = "deny(403)"
@@ -27,7 +28,7 @@ resource "google_compute_security_policy" "this" {
 
     match {
       expr {
-        expression = "urlDecode(request.path).lower().matches('^/+api(/|$)')"
+        expression = "request.path.lower().matches('^/+(a|%61)(p|%70)(i|%69)(/|$)')"
       }
     }
   }
