@@ -71,6 +71,14 @@ config :tailwind,
     env: %{"NODE_PATH" => [Path.expand("../deps", __DIR__), Mix.Project.build_path()]}
   ]
 
+# PDF 帳票(`FoodShip.Utils.Pdf`)。test は config/test.exs で Fake に差し替える。
+# プール数・タイムアウト・Chromium のパスは runtime.exs(`PDF_*`)。
+config :food_ship, FoodShip.Utils.Pdf,
+  adapter: FoodShip.Utils.Pdf.Chromic,
+  start: true,
+  pool_size: 2,
+  timeout: 30_000
+
 # Configure Elixir's Logger
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",

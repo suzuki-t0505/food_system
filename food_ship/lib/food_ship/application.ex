@@ -7,16 +7,18 @@ defmodule FoodShip.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
-      FoodShipWeb.Telemetry,
-      FoodShip.Repo,
-      {DNSCluster, query: Application.get_env(:food_ship, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: FoodShip.PubSub},
-      # Start a worker by calling: FoodShip.Worker.start_link(arg)
-      # {FoodShip.Worker, arg},
-      # Start to serve requests, typically the last entry
-      FoodShipWeb.Endpoint
-    ]
+    children =
+      [
+        FoodShipWeb.Telemetry,
+        FoodShip.Repo,
+        {DNSCluster, query: Application.get_env(:food_ship, :dns_cluster_query) || :ignore},
+        {Phoenix.PubSub, name: FoodShip.PubSub}
+      ] ++
+        FoodShip.Utils.Pdf.child_specs() ++
+        [
+          # Start to serve requests, typically the last entry
+          FoodShipWeb.Endpoint
+        ]
 
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options

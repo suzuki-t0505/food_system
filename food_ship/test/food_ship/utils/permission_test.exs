@@ -58,6 +58,12 @@ defmodule FoodShip.Utils.PermissionTest do
       refute Permission.can?(@viewer, :manage_shipping_slips)
     end
 
+    test "トータルピックの作成・再発行・取消と帳票の出力 (manage_total_picks) は staff 以上" do
+      assert Permission.can?(@admin, :manage_total_picks)
+      assert Permission.can?(@staff, :manage_total_picks)
+      refute Permission.can?(@viewer, :manage_total_picks)
+    end
+
     test "箱数の修正・梱包完了 (pack_shipping_slips) は staff 以上" do
       assert Permission.can?(@admin, :pack_shipping_slips)
       assert Permission.can?(@staff, :pack_shipping_slips)

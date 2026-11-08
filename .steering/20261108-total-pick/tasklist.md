@@ -6,21 +6,23 @@
 
 ## 0. 実行環境
 
-- [ ] テスト実行環境を用意し、既存の `food_ship` の `mix test` が通ることを確認する（初回は `mix deps.get`）
-- [ ] `chromic_pdf` と `scrivener_ecto` の互換バージョンを確認する（design §8）
-- [ ] Chromium（`/opt/pw-browsers/chromium`）と日本語フォント（`fc-list :lang=ja`）の有無を確認する。フォントが無ければ、実機確認の可否を記録する
+- [x] テスト実行環境を用意し、既存の `food_ship` の `mix test` が通ることを確認する（初回は `mix deps.get`）
+- [x] `chromic_pdf` と `scrivener_ecto` の互換バージョンを確認する（design §8）
+- [x] Chromium と日本語フォントの有無を確認する（sandbox ホストは `libnss3` 無しで実行不可・日本語フォントは WenQuanYi のみ → `apt-get install chromium fonts-noto-cjk` を入れたイメージ `food-ship-pdf` を作って使う）
 
 ## 1. 単位 A: 基盤・PDF 環境
 
-- [ ] `mix.exs` に `chromic_pdf`・`scrivener_ecto` を追加し、`Repo` に `use Scrivener, page_size: 20`
-- [ ] `Permission` に `manage_total_picks`（`staff`）を追加し、テストを更新
-- [ ] `FoodShip.Utils.Pdf`（アダプタへ委譲・`child_specs/0`）・`Pdf.Chromic`（`print_to_pdf`、`:busy` への変換、`%PDF` の検査）・`Pdf.Fake`
-- [ ] `config/config.exs`・`dev.exs`（`no_sandbox: true`）・`test.exs`（`Fake`・`start: false`）・`runtime.exs`（`PDF_POOL_SIZE`・`PDF_TIMEOUT_MS`・`PDF_CHROME_PATH`。本番節で `no_sandbox` を読まない）
-- [ ] `FoodShip.Application` に PDF の子プロセスを足す（`start: false` なら空）
-- [ ] `Dockerfile.dev` に `chromium` と `fonts-noto-cjk` を追加
-- [ ] `Pdf` のテスト（`Fake` の委譲・`child_specs/0`）と、実 Chromium のテスト（`@tag :pdf`。`PDF_TEST=1` のときだけ実行。`test_helper.exs` で除外）
-- [ ] ログのカテゴリを確認する（`raise_on_unknown_category` に注意）
-- [ ] 品質ゲート、コミット・プッシュ
+- [x] `mix.exs` に `chromic_pdf`・`scrivener_ecto` を追加し、`Repo` に `use Scrivener, page_size: 20`
+- [x] `Permission` に `manage_total_picks`（`staff`）を追加し、テストを更新
+- [x] `FoodShip.Utils.Pdf`（アダプタへ委譲・`child_specs/0`）・`Pdf.Chromic`（`print_to_pdf`、`:busy` への変換、`%PDF` の検査）・`Pdf.Fake`
+- [x] `config/config.exs`・`dev.exs`（`no_sandbox: true`）・`test.exs`（`Fake`・`start: false`）・`runtime.exs`（`PDF_POOL_SIZE`・`PDF_TIMEOUT_MS`・`PDF_CHROME_PATH`。本番節で `no_sandbox` を読まない）
+- [x] `FoodShip.Application` に PDF の子プロセスを足す（`start: false` なら空）
+- [x] `Dockerfile.dev` に `chromium` と `fonts-noto-cjk` を追加
+- [x] `Pdf` のテスト（`Fake` の委譲・`child_specs/0`）と、実 Chromium のテスト（`@tag :pdf`。`PDF_TEST=1` のときだけ実行。`test_helper.exs` で除外）
+- [x] ログのカテゴリを確認する（既存の `:other` を使う。カテゴリは追加しない）
+- [x] 品質ゲート、コミット・プッシュ
+
+- 実装メモ: ChromicPDF の既定出力は Base64 なので `Base.decode64` して `%PDF` を検査する。`deps/` の読み取りが許可されず API は既知の範囲で書いて実機テストで検証した。実機テストは `COMPOSE_FILE` に `image: food-ship-pdf:latest` の override を足して `PDF_TEST=1 mix test` で実行する
 
 ## 2. 単位 B: ピックの作成・集計（Context）
 
