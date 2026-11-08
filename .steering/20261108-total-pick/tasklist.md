@@ -73,8 +73,8 @@
 - [ ] 実機確認（画面）: アプリを起動してブラウザで操作する確認は**未実施**（assets のビルドと在庫側の起動が要る。画面は LiveView のテストで表示と DB の書き込みを確認した）
 - [x] 50 伝票の束ね PDF の生成時間を測る（目標 30 秒以内）→ 約 0.7〜0.9 秒（53 ページ）。非同期化は不要
 - [x] 両アプリで品質ゲート（`food_vault` が影響を受けていないこと）→ `food_ship` 486 件・`food_vault` 447 件が通過
-- [ ] 永続ドキュメントの更新（承認を得て行う）: `functional-design.md`（`total_pick_id` の「段階 5 で追加」・ルーティング）・`architecture.md`（§3.2・§10・決定事項に追記）・`repository-structure.md`（計画 → 現状）・`development-guidelines.md`（段階 5 の進捗）・`glossary.md`（必要なら）
-- [ ] 本ファイルの全項目を完了にし、コミット・プッシュ
+- [x] 永続ドキュメントの更新（承認を得て行った。`glossary.md` は既存の用語で足りるため変更なし）: `functional-design.md`（`total_pick_id` の「段階 5 で追加」・ルーティング）・`architecture.md`（§3.2・§10・決定事項に追記）・`repository-structure.md`（計画 → 現状）・`development-guidelines.md`（段階 5 の進捗）・`glossary.md`（必要なら）
+- [x] 本ファイルの全項目を完了にし、コミット・プッシュ（「画面のブラウザ確認」のみ未実施として残す）
 
 ### 動作確認の記録（PDF）
 
