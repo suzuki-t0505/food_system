@@ -23,7 +23,7 @@ defmodule FoodShipWeb.TotalPickLive.Show do
       <.header>
         トータルピック {TotalPick.pick_no_label(@pick)}
         <:subtitle>
-          第{@pick.revision}版<.pick_status_badge status={@pick.status} />
+          第{@pick.revision}版 <.pick_status_badge status={@pick.status} class="ml-2" />
         </:subtitle>
         <:actions>
           <.link navigate={~p"/total_picks"} class="btn" id="to-total-picks">一覧へ</.link>

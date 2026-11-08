@@ -57,14 +57,16 @@
 
 <section class="page" id="sorting-sheet">
   <h1>仕分け表 {pick_no(@pick)}（第{@pick.revision}版）</h1>
-  <p class="small">{@pick.scheduled_ship_date}{@pick.client.client_name}{@pick.maker_name}</p>
+  <p class="small">
+    {@pick.scheduled_ship_date} / {@pick.client.client_name} / {@pick.maker_name}
+  </p>
 
   <table id="sorting-lines">
     <thead>
       <tr>
-        <th>商品</th>
-        <th>期限日</th>
-        <th class="num">バラ数</th>
+        <th class="col-item">商品</th>
+        <th class="col-date">期限日</th>
+        <th class="num col-qty">バラ数</th>
         <th>仕分け（伝票番号 × 数量）</th>
       </tr>
     </thead>

@@ -37,10 +37,15 @@ defmodule FoodShipWeb.SlipComponents do
 
   @doc "トータルピックの状態バッジ。"
   attr :status, :atom, required: true
+  attr :class, :string, default: nil
 
   def pick_status_badge(assigns) do
     ~H"""
-    <span class={["badge badge-sm whitespace-nowrap", Map.fetch!(pick_status_classes(), @status)]}>
+    <span class={[
+      "badge badge-sm whitespace-nowrap",
+      Map.fetch!(pick_status_classes(), @status),
+      @class
+    ]}>
       {TotalPick.status_label(@status)}
     </span>
     """

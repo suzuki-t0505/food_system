@@ -358,4 +358,125 @@ defmodule FoodShipWeb.ReportControllerTest do
       refute body =~ "boom"
     end
   end
+
+  # 実 Chromium で帳票を生成する（`PDF_TEST=1`。`PDF_OUT_DIR` を指定すると PDF を書き出す）。
+  # 日本語・罫線・A4 縦・改ページは、書き出した PDF を画像にして目視で確認する
+  describe "実 Chromium" do
+    @describetag :pdf
+    @describetag role: :staff
+    setup :register_and_log_in_user
+
+    setup do
+      original = Application.get_env(:food_ship, Pdf)
+      on_exit(fn -> Application.put_env(:food_ship, Pdf, original) end)
+
+      config = Keyword.merge(original, adapter: Pdf.Chromic, start: true, no_sandbox: true)
+      Application.put_env(:food_ship, Pdf, config)
+
+      start_supervised!(%{
+        id: :chromic_pdf_report_test,
+        start: {Supervisor, :start_link, [Pdf.child_specs(), [strategy: :one_for_one]]},
+        type: :supervisor
+      })
+
+      :ok
+    end
+
+    defp write_pdf(name, conn) do
+      assert "%PDF" <> _ = body = response(conn, 200)
+      if dir = System.get_env("PDF_OUT_DIR"), do: File.write!(Path.join(dir, name), body)
+      body
+    end
+
+    test "ピック表・束ね・作業指示書を PDF にできる", %{conn: conn, scope: scope} do
+      client = client_fixture(%{client_name: "株式会社サンプル百貨店"})
+
+      item_a =
+        shipping_item_fixture(%{
+          item_code: "A0001",
+          item_name: "国産きのこの味わい缶詰セット（化粧箱入り）",
+          maker_name: "山田食品株式会社"
+        })
+
+      item_b =
+        shipping_item_fixture(%{
+          item_code: "B0002",
+          item_name: "瓶詰 ゆず茶",
+          maker_name: "山田食品株式会社",
+          inventory_maker_id: item_a.inventory_maker_id
+        })
+
+      _rule =
+        expiration_rule_fixture(%{
+          client_id: client.id,
+          shipping_item_id: item_a.id,
+          min_remaining_days: 30
+        })
+
+      base = %{client_id: client.id, scheduled_ship_date: ~D[2026-11-20]}
+
+      allocated_slip_fixture(
+        Map.merge(base, %{shipping_item_id: item_a.id, client_slip_no: "PO-1001"}),
+        scope: scope,
+        lots: [{"2026-12-20", 20}, {"2027-03-01", 16}]
+      )
+
+      allocated_slip_fixture(
+        Map.merge(base, %{shipping_item_id: item_a.id, client_slip_no: "PO-1002"}),
+        scope: scope,
+        lots: [{"2026-12-20", 30}, {"9999-12-31", 6}]
+      )
+
+      allocated_slip_fixture(Map.merge(base, %{shipping_item_id: item_b.id}),
+        scope: scope,
+        lots: [{"2027-01-15", 36}]
+      )
+
+      {:ok, [pick]} =
+        TotalPicks.create_total_picks(scope, ~D[2026-11-20], [
+          {client.id, item_a.inventory_maker_id}
+        ])
+
+      pick = TotalPicks.get_total_pick!(pick.id)
+      slip = hd(pick.shipping_slips)
+
+      pick_pdf = write_pdf("pick.pdf", get(conn, ~p"/reports/total_picks/#{pick.id}"))
+      bundle_pdf = write_pdf("bundle.pdf", get(conn, ~p"/reports/total_picks/#{pick.id}/bundle"))
+      work_pdf = write_pdf("work_order.pdf", get(conn, ~p"/reports/work_orders/#{slip.id}"))
+
+      assert byte_size(bundle_pdf) > byte_size(pick_pdf)
+      assert byte_size(work_pdf) > 1000
+    end
+
+    @tag timeout: 120_000
+    test "50 伝票を束ねた PDF を 30 秒以内に生成できる", %{conn: conn, scope: scope} do
+      client = client_fixture()
+      item = shipping_item_fixture()
+
+      base = %{
+        client_id: client.id,
+        shipping_item_id: item.id,
+        scheduled_ship_date: ~D[2026-11-20]
+      }
+
+      for n <- 1..50 do
+        allocated_slip_fixture(Map.put(base, :client_slip_no, "PO-#{n}"),
+          scope: scope,
+          lots: [{"2026-12-20", 20}, {"2027-0#{rem(n, 9) + 1}-01", 16}]
+        )
+      end
+
+      {:ok, [pick]} =
+        TotalPicks.create_total_picks(scope, ~D[2026-11-20], [
+          {client.id, item.inventory_maker_id}
+        ])
+
+      {micros, conn} =
+        :timer.tc(fn -> get(conn, ~p"/reports/total_picks/#{pick.id}/bundle") end)
+
+      write_pdf("bundle50.pdf", conn)
+      IO.puts("50 伝票の束ね PDF: #{div(micros, 1000)} ms")
+      assert micros < 30_000_000
+    end
+  end
 end

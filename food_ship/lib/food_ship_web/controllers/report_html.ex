@@ -37,6 +37,11 @@ defmodule FoodShipWeb.ReportHTML do
   .check { width: 14mm; }
   .total td { font-weight: bold; background: #f6f6f6; }
   .write-in { height: 14mm; }
+  .col-item { width: 24%; }
+  .col-date { width: 13%; }
+  .col-qty { width: 9%; }
+  .write-in-table th { width: 16%; }
+  .write-in-table td { width: 17%; }
   .page + .page { break-before: page; }
   .small { font-size: 8.5pt; }
   """
