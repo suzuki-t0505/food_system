@@ -1,0 +1,105 @@
+name: Deploy (dev)
+
+# dev ブランチへのマージ(= push)で、Docker イメージを build → Artifact Registry へ push し、
+# Cloud Run Job(マイグレーション)と Cloud Run サービスのイメージを更新する。
+# 品質ゲートは PR 時の ci.yml。GCP へは Workload Identity Federation で認証する(キーレス)。
+# 認証できるのはこのリポジトリの dev ブランチ上のワークフローだけ(infra/terraform/ci.tf の attribute_condition)。
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+# 同時に複数のデプロイを走らせない。実行中のデプロイは中断しない
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  build-push:
+    name: build-push (${{ matrix.app }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: dev
+    env:
+      # Environment(dev)の Variables を参照するためジョブ単位で定義する。
+      # REGISTRY は Terraform の local.registry と同じ形: <region>-docker.pkg.dev/<project>/food-system
+      REGISTRY: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/food-system
+      REGION: ${{ vars.GCP_REGION }}
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [food_vault, food_ship]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Artifact Registry への docker 認証
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Dockerfile は各アプリのディレクトリにあり、ビルドコンテキストもそのディレクトリ
+      - name: build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.app }}
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ matrix.app }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,scope=${{ matrix.app }},mode=max
+
+  deploy:
+    name: deploy
+    needs: build-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: dev
+    env:
+      # Environment(dev)の Variables を参照するためジョブ単位で定義する。
+      # REGISTRY は Terraform の local.registry と同じ形: <region>-docker.pkg.dev/<project>/food-system
+      REGISTRY: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/food-system
+      REGION: ${{ vars.GCP_REGION }}
+
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # 在庫(vault)→ 発送(ship)の順。発送は在庫 API に依存するため、在庫が失敗したら発送は更新しない。
+      # 各アプリは「Job 更新 → Job 実行(完了待ち) → サービス更新」。Job が失敗したらサービスは旧イメージのまま。
+      - name: Job 更新 → マイグレーション実行 → サービス更新
+        run: |
+          {
+            echo "## Deploy (dev)"
+            echo
+            echo "| アプリ | イメージタグ | URL |"
+            echo "| :-- | :-- | :-- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for app in food_vault food_ship; do
+            name="${app//_/-}"
+            image="${REGISTRY}/${app}:${GITHUB_SHA}"
+
+            echo "::group::${name}"
+            gcloud run jobs update "${name}-migrate" --image "${image}" --region "${REGION}"
+            gcloud run jobs execute "${name}-migrate" --region "${REGION}" --wait
+            gcloud run services update "${name}" --image "${image}" --region "${REGION}"
+            echo "::endgroup::"
+
+            url="$(gcloud run services describe "${name}" --region "${REGION}" --format='value(status.url)')"
+            echo "| ${name} | \`${GITHUB_SHA}\` | ${url} |" >> "$GITHUB_STEP_SUMMARY"
+          done

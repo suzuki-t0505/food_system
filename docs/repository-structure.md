@@ -20,6 +20,7 @@ food_system/
 ├── mock/                      # HTML モック（create-mock スキルの出力）［計画］
 ├── food_vault/                # 在庫管理システム（Phoenix アプリ）［現状：雛形］
 ├── food_ship/                 # 発送システム（Phoenix アプリ）［現状：段階 4（P0）まで実装］
+├── .github/workflows/         # ci.yml（PR の品質ゲート）・deploy-dev.yml（dev ブランチへの push で自動デプロイ）［現状］
 ├── infra/terraform/           # GCP 基盤の Terraform（§1.2）［現状］
 ├── .claude/                   # Claude Code の設定・エージェント・スキル［現状］
 └── .agents/skills/            # security-audit スキル［現状］
@@ -46,6 +47,7 @@ infra/terraform/
 ├── apis.tf / registry.tf / network.tf / sql.tf / secrets.tf   # 共有基盤（API・Artifact Registry・VPC・Cloud SQL・共有の秘密）
 ├── apps.tf                    # module "food_vault" / "food_ship" の呼び出し
 ├── lb.tf / armor.tf           # 外部アプリケーション LB・Cloud Armor
+├── ci.tf                      # GitHub Actions 用の Workload Identity Federation・デプロイ用サービスアカウント
 ├── modules/app/               # 1 アプリ分（DB・DB ユーザー・秘密・SA・Cloud Run サービス・Cloud Run Job）
 └── tests/plan.tftest.hcl      # terraform test（モックプロバイダで plan を評価）
 ```

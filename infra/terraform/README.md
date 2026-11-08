@@ -66,11 +66,46 @@ gcloud secrets versions access latest --secret food-ship-initial-admin-password 
 
 ## 更新(デプロイ)
 
-1. 新しいタグでイメージをビルド・プッシュ(初回構築の 4)
-2. `terraform.tfvars` の `food_vault_image_tag` / `food_ship_image_tag` を変更し `terraform apply`
-3. Job を実行(初回構築の 6)
+`dev` ブランチへのマージで GitHub Actions(`.github/workflows/deploy-dev.yml`)が自動デプロイする。設計は [.steering/20261108-github-actions-deploy/design.md](../../.steering/20261108-github-actions-deploy/design.md)。
 
-`apply` でサービスと Job が同時に新しいイメージになり、Job の実行までは新コードが旧スキーマで動く。マイグレーションは旧コードと新コードの両方で動く形にする(architecture §5 の「NOT NULL 追加は `default:` 付き」など)。
+```
+feature/* ─PR(ci.yml)→ dev ─マージ→ deploy-dev.yml
+  build-push: アプリごとに docker build → Artifact Registry へ push(タグはコミット SHA)
+  deploy    : food_vault → food_ship の順に「Job のイメージ更新 → Job 実行(完了待ち) → サービスのイメージ更新」
+```
+
+- Job が失敗するとサービスは旧イメージのまま止まり、以降のアプリも更新しない
+- Job(新スキーマ)の実行からサービス切替までは旧コードが新スキーマで動く。マイグレーションは後方互換にする(architecture §5 の「NOT NULL 追加は `default:` 付き」など)
+- 手動実行は Actions の `Deploy (dev)` → `Run workflow`(`dev` ブランチ上でのみ認証できる)
+- イメージは CI が更新するため、Terraform は Cloud Run サービス・Job の `image` を `ignore_changes` にしている。`terraform apply` を再実行してもイメージは巻き戻らない(`food_*_image_tag` は新規作成時のみ使われる)
+
+### 自動デプロイの初回セットアップ
+
+Workload Identity Federation(キーレス)とデプロイ用サービスアカウントは `ci.tf` で作る。ワークフロー自身は作れないため、初回は作業者が行う。
+
+```bash
+# 1. WIF・デプロイ用 SA を作る(既存環境では plan でイメージの差分が出ないことを確認する)
+terraform plan
+terraform apply
+
+# 2. GitHub の Environment dev の Variables に登録する値を確認
+terraform output workload_identity_provider   # → GCP_WORKLOAD_IDENTITY_PROVIDER
+terraform output deployer_service_account     # → GCP_SERVICE_ACCOUNT
+# GCP_PROJECT_ID = terraform.tfvars の project_id、GCP_REGION = region(既定 asia-northeast1)
+
+# 3. Environment dev を作って Variables を登録する(GitHub の Settings → Environments、または gh)
+gh variable set GCP_PROJECT_ID --env dev --body "${PROJECT_ID}"
+gh variable set GCP_REGION --env dev --body "${REGION}"
+gh variable set GCP_WORKLOAD_IDENTITY_PROVIDER --env dev --body "$(terraform output -raw workload_identity_provider)"
+gh variable set GCP_SERVICE_ACCOUNT --env dev --body "$(terraform output -raw deployer_service_account)"
+
+# 4. main から dev ブランチを作る(必要ならブランチ保護で PR 必須・CI 必須にする)
+git push origin origin/main:refs/heads/dev
+```
+
+- 認証を許可するリポジトリとブランチは変数 `github_repository`(既定 `suzuki-t0505/food_system`)と `github_deploy_branch`(既定 `dev`)で決まる。他のリポジトリ・ブランチからのトークンは拒否される
+- デプロイ用 SA の権限は、Artifact Registry `food-system` への書き込み、Cloud Run の更新・Job 実行(`roles/run.developer`)、両アプリの実行 SA への `actAs` のみ
+- Workload Identity プールを削除すると 30 日間はソフト削除となり、同じ ID(`github`)では再作成できない。作り直すときは ID を変える
 
 ## 設定のポイント
 
