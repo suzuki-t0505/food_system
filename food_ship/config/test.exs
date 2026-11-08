@@ -53,5 +53,12 @@ config :food_ship, FoodShip.Inventory.Client,
   retry_base_ms: 0,
   req_options: [plug: {Req.Test, FoodShip.Inventory.Client}]
 
+# PDF は Chromium を起動せず Fake に差し替える(実機テストは PDF_TEST=1 で別途起動する)
+config :food_ship, FoodShip.Utils.Pdf,
+  adapter: FoodShip.Utils.Pdf.Fake,
+  start: false,
+  no_sandbox: true,
+  chrome_executable: System.get_env("PDF_CHROME_PATH")
+
 # 未定義のログカテゴリは例外にする (本番は false)
 config :food_ship, FoodShip.Utils.Logger, raise_on_unknown_category: true

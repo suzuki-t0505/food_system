@@ -364,6 +364,16 @@ defmodule FoodShipWeb.ShippingSlipLive.FormTest do
       assert html =~ "在庫不足の場合、現在の引当は解除されます"
     end
 
+    test "トータルピックに紐づく伝票は、確認ダイアログにピックから外れる旨を出す", %{conn: conn, scope: scope} do
+      {pick, [slip, _]} = FoodShip.TotalPicksFixtures.total_pick_fixture(scope: scope)
+      {:ok, lv, _} = live(conn, ~p"/shipping_slips/#{slip.id}/edit")
+
+      form = lv |> element("#shipping-slip-form button") |> render()
+      pick_no = FoodShip.TotalPicks.TotalPick.pick_no_label(pick)
+
+      assert form =~ "#{pick_no} から外れ、再発行が必要になります"
+    end
+
     test "件数を変えると箱数・出庫総数量が再計算され、保存すると旧オーダーを解除して再引当する", %{conn: conn, scope: scope, user: user} do
       slip = allocated_slip(scope)
       {:ok, lv, _} = live(conn, ~p"/shipping_slips/#{slip.id}/edit")

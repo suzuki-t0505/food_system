@@ -17,7 +17,7 @@
 | ID | ULID（`Ecto.ULID`） | 依存と採否は [§4](#4-ulid-基盤) |
 | HTTP クライアント | Req 0.5 | 発送 → 在庫の API 呼び出し。両アプリの `mix.exs` に導入済み |
 | CSS / JS | Tailwind CSS 4（daisyUI 5）/ esbuild | `core_components.ex` は改変しない |
-| PDF（発送のみ） | ChromicPDF（ヘッドレス Chromium）を推奨 | 環境構築は別セッション。前提は [§10](#10-pdf-帳票発送システム) |
+| PDF（発送のみ） | ChromicPDF（ヘッドレス Chromium） | 段階 5 で導入。前提は [§10](#10-pdf-帳票発送システム)。本番イメージへの反映は未対応 |
 | 開発環境 | Docker Compose（`food_vault_web` / `food_ship_web` / `db` / `pgadmin4`） | ホストで直接 `mix` を叩かない |
 | 認証 | `mix phx.gen.auth` ベース（bcrypt） | 自己登録・マジックリンク・メール確認は除去（[§8](#8-認証認可の実装)） |
 
@@ -128,8 +128,8 @@ flowchart TB
 | `FoodShip.Clients` | `Client` |
 | `FoodShip.ShippingItems` | `ShippingItem` |
 | `FoodShip.ExpirationRules` | `ExpirationRule` |
-| `FoodShip.ShippingSlips` | `ShippingSlip`, `SlipAllocatedLot`（登録・引当・再引当・数量変更・梱包・取消・箱数の修正。**段階 4 で実装済み**。一括再引当・CSV 取込は段階 5）。補助モジュール `AllocationResult`（在庫 API の応答 → 伝票への反映内容。純粋関数） |
-| `FoodShip.TotalPicks` | `TotalPick`（作成・再発行・取消・ピック明細と仕分け内訳の集計。段階 5） |
+| `FoodShip.ShippingSlips` | `ShippingSlip`, `SlipAllocatedLot`（登録・引当・再引当・数量変更・梱包・取消・箱数の修正。**段階 4 で実装済み**。一括再引当・CSV 取込は段階 5 の別作業。数量変更・取消ではトータルピックから外す）。補助モジュール `AllocationResult`（在庫 API の応答 → 伝票への反映内容。純粋関数） |
+| `FoodShip.TotalPicks` | `TotalPick`（作成・再発行・取消・ピック明細と仕分け内訳の集計。**段階 5（F-S6）で実装済み**）。`release/2` は `ShippingSlips` が伝票をピックから外したあとに呼ぶ内部 API（依存は `ShippingSlips → TotalPicks` の一方向）。ロックは常に「伝票 → ピック」の順 |
 | `FoodShip.Inventory.Client` | 在庫側 API クライアント（`Req`）。外部境界モジュール |
 
 - Context が肥大したら集約単位で分割する（目安 800 行、または 1 ファイルに集約が 3 つ以上）。
@@ -334,7 +334,7 @@ end
 
 - 配信は LiveView ではなく **Controller**（`FoodShipWeb.ReportController`：`total_pick/2`・`work_order/2`・`total_pick_bundle/2`）。認可は HTTP plug で `staff` 以上に限定する（`on_mount` は不要）。
 - HTML テンプレートは `FoodShipWeb.ReportHTML`（HEEx）で作り、A4 縦・日本語フォント（Noto Sans JP）で PDF 化する。生成は **`FoodShip.Utils.Pdf` に閉じ込める**（外部 I/O の境界。テストではこのモジュールだけをモックしてよい）。
-- 推奨ライブラリは `ChromicPDF`（HTML/CSS をそのままレイアウトでき、日本語・罫線表に強い）。`Dockerfile.dev` への Chromium と `fonts-noto-cjk` の追加、`mix.exs` への依存追加、アプリ起動時の supervisor 登録が必要。環境構築は別セッションで実施し、ライブラリの最終決定はその際に行う。
+- 推奨ライブラリは `ChromicPDF`（HTML/CSS をそのままレイアウトでき、日本語・罫線表に強い）。`Dockerfile.dev` への Chromium と `fonts-noto-cjk` の追加、`mix.exs` への依存追加、アプリ起動時の supervisor 登録が必要。**段階 5 で導入済み**（`mix.exs` に `chromic_pdf`、`FoodShip.Application` が `Pdf.child_specs/0` を起動、`Dockerfile.dev` に `chromium` と `fonts-noto-cjk`。テストは `Pdf.Fake`、実機の確認は `PDF_TEST=1` の `@tag :pdf`）。
 - 帳票は **都度生成して保存しない**。ピック表の集計は `TotalPicks` のクエリ関数（`defp *_query/2` に分割）で都度算出し、テンプレートに計算式を書かない（coding-rules §6・§10.7）。日時は JST。
 
 ### 10.2 前提（環境構築セッションでも守る）
@@ -368,7 +368,7 @@ end
 | 発送 | `INVENTORY_API_TOKEN` | 在庫 API 用のサービストークン（開発は在庫側と同じ既定値あり） | 本番は必須 |
 | 発送 | `INVENTORY_WAREHOUSE_ID` | 対象倉庫 ID（在庫側 `GET /api/v1/warehouses` で確認）。**任意**: GCP の初回デプロイは空で起動するため、未設定でも起動し、設定されるまで伝票登録・再引当・数量変更を拒否する（画面に警告を表示） | 任意（業務操作には必要） |
 | 発送 | `INVENTORY_API_CONNECT_TIMEOUT_MS` / `INVENTORY_API_RECEIVE_TIMEOUT_MS` | タイムアウト（既定 5000 / 15000） | 任意 |
-| 発送 | PDF の設定（プール数・タイムアウト） | ChromicPDF（[§10](#10-pdf-帳票発送システム)） | 任意 |
+| 発送 | `PDF_POOL_SIZE` / `PDF_TIMEOUT_MS` / `PDF_CHROME_PATH` | ChromicPDF のセッションプール数（既定 2）・1 回あたりのタイムアウト（既定 30000 ミリ秒）・Chromium の実行パス（省略時は PATH から探す）。`no_sandbox` は環境変数にせず、`dev.exs` でだけ有効にする（[§10](#10-pdf-帳票発送システム)） | 任意 |
 
 ---
 
@@ -457,7 +457,7 @@ end
 | 1 | ULID 依存の採否 | **解決済み**: `ecto_ulid_next` を採用（§4） |
 | 2 | `phx.gen.auth` 生成物の削減範囲 | **解決済み**: 実生成して確認し、§8.1 のとおり削減した。セッション有効期間は `inserted_at` ベースで設計と一致。ULID 化は schema を `use {App}.Schema` に替え、migration を `:binary_id` の主キー・FK にする |
 | 3 | 本番の構成 | **一部解決**: デプロイ先を GCP（LB ＋ Cloud Armor ＋ Cloud Run ＋ Cloud Run Job ＋ Cloud SQL）とし、TLS 終端と `/api` の送信元制限を §2.3 のとおり Terraform で定義した。リリースタスク（`migrate` / `migrate_and_seed`）を追加。CI/CD は `dev` ブランチへのマージで dev 環境へ自動デプロイするところまで解決（§2.3・§14）。未決: Chromium の本番構成、`X-Forwarded-For` からの送信元 IP（§12）、`main`（本番）へのデプロイ、監視 |
-| 4 | PDF のライブラリ最終決定 | `ChromicPDF` を前提に、環境構築セッションで確定。サンドボックス、プール数、タイムアウト |
+| 4 | PDF のライブラリ最終決定 | **解決済み（段階 5）**: `ChromicPDF`（1.17）に決定。`FoodShip.Utils.Pdf` がアダプタ（`Pdf.Chromic`／テストは `Pdf.Fake`）へ委譲する。プール数・タイムアウトは `PDF_*`、`no_sandbox` は開発のみ。`Dockerfile.dev` に `chromium` と `fonts-noto-cjk` を追加。本番イメージ（`food_ship/Dockerfile`）には `chromium`・`fonts-noto-cjk` を追加し `nobody` 実行のままにした。**未決**: コンテナではサンドボックスが起動しないため、本番の `no_sandbox` の扱い（§10.2）と Cloud Run での PDF 出力の可否 |
 | 5 | 品質ゲートの整備 | **解決済み**: `check`、`credo`、`.credo.exs`、PR ワークフローを整備（§14）。CI の実行は PR を出して初めて確認できる |
 | 6 | 環境変数の命名の確定 | **一部解決**: `INITIAL_ADMIN_EMAIL` / `INITIAL_ADMIN_PASSWORD` を確定し `runtime.exs` に反映済み（段階 1）。在庫 API 関連は、在庫側の `INVENTORY_API_TOKENS` を段階 3 で、発送側の `INVENTORY_API_BASE_URL` / `INVENTORY_API_TOKEN` / `INVENTORY_WAREHOUSE_ID` / `INVENTORY_API_*_TIMEOUT_MS` を段階 4 で確定・反映済み（`runtime.exs`。dev は既定値あり。本番は `BASE_URL`・`TOKEN` が必須、`WAREHOUSE_ID` は任意）。**解決済み** |
 | 7 | 在庫 0 ロットの整理 | 長期運用での肥大化対策（アーカイブなど）。運用開始後に決める |
@@ -465,3 +465,4 @@ end
 | 9 | 在庫側の核の実装（段階 2） | **解決済み**: ページングは `scrivener_ecto`（`Repo` に `use Scrivener, page_size: 20`）。並行テストは `ConcurrencyCase`（`sandbox: false` で実コミット、`async: false`、後始末は `TRUNCATE`）。追記専用は DB トリガー（`forbid_update_delete()`）でも担保。在庫 0 のロットは引当済数も 0（CHECK 制約）なので、商品・倉庫のアーカイブ規則の「`allocated` なオーダーに含まれない」は在庫 0 の検査で満たされる |
 | 10 | 在庫 API の実装（段階 3） | **解決済み**: ①②③⑤⑥⑦ を `/api/v1` に実装（④ 出庫取消は段階 5）。認証・共通エラー形式・`operator` の扱いは §7。Endpoint レベルのエラー（壊れた JSON など）を JSON にするため `render_errors` を JSON 先頭にした。本番の TLS 終端と `/api` の送信元制限は #3 の本番構成の決定後 |
 | 11 | 発送側 P0 の実装（段階 4） | **解決済み**: マスタ・`Inventory.Client`・伝票登録／再引当／数量変更／取消／梱包完了・作業画面を実装（§9）。`allocation_attempted_at` は同時操作の識別のためマイクロ秒精度（§9.4）。`INVENTORY_WAREHOUSE_ID` は任意（§11）。トータルピック・PDF・CSV・出庫取消は段階 5 |
+| 12 | トータルピック・PDF 帳票の実装（段階 5・F-S6） | **解決済み**: 作成・再発行・取消・集計（`TotalPicks`）、伝票の変更とのトランザクション連動（`ShippingSlips` が `release/2` を呼ぶ。取消は確保後に紐づけられても外れるよう伝票を読み直す）、帳票 3 種（`ReportController`・`ReportHTML`）を実装（§10）。ロックは伝票 → ピックの順。ピック表の件数・箱数は商品単位。実 Chromium で日本語・A4 縦・改ページを確認し、50 伝票の束ね PDF（53 ページ）は約 1 秒で生成できたため非同期化はしない。未決: 本番の Chromium のサンドボックス（`no_sandbox` の扱い）、現場での印刷確認 |

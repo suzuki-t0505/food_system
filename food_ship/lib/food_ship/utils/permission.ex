@@ -20,7 +20,9 @@ defmodule FoodShip.Utils.Permission do
       # 伝票登録・再引当・数量変更・取消
       manage_shipping_slips: :staff,
       # 箱数の修正・梱包完了
-      pack_shipping_slips: :staff
+      pack_shipping_slips: :staff,
+      # トータルピックの作成・再発行・取消、帳票(PDF)の出力
+      manage_total_picks: :staff
     }
   end
 

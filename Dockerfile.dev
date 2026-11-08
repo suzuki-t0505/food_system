@@ -6,6 +6,7 @@ ARG RUNNER_IMAGE="elixir:${ELIXIR_VERSION}"
 FROM ${BASE_IMAGE} AS base
 
 RUN apt-get update -y && apt-get install -y build-essential inotify-tools npm git \
+    chromium fonts-noto-cjk \
   && apt-get clean && rm -f /var/lib/apt/lists/*_*
 
 FROM base AS setup_user

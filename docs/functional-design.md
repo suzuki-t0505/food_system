@@ -265,7 +265,7 @@ erDiagram
 | :-- | :-- | :-- |
 | `slip_no` | integer | NOT NULL, UNIQUE。DB シーケンスで採番（読み取り専用）。`S-000123` 形式で表示 |
 | `client_id` / `shipping_item_id` | ULID | NOT NULL, FK |
-| `total_pick_id` | ULID | NULL可, FK。未ピックは NULL。作成時に紐づくのは `allocated` のみ。`packed` になっても外さない。**列は `total_picks` と一緒に段階 5 で追加する**（段階 4 の `shipping_slips` には無い） |
+| `total_pick_id` | ULID | NULL可, FK。未ピックは NULL。作成時に紐づくのは `allocated` のみ。`packed` になっても外さない。**段階 5（F-S6）で `total_picks` と一緒に追加した**。DB の CHECK `total_pick_only_when_picked`（`total_pick_id` があるのは `allocated` / `packed` のみ）で担保する。数量・出荷予定日の変更と取消では、同じ UPDATE で `status` と一緒に NULL にする |
 | `client_slip_no` | string | NULL可（手入力は任意、CSV は必須） |
 | `scheduled_ship_date` | date | NOT NULL（ソート・集計の基準軸） |
 | `order_count` | integer | NOT NULL, CHECK `> 0` |
@@ -314,7 +314,7 @@ erDiagram
 
 - 明細（商品 × 期限日の合算）は持たず、紐づく伝票の引当ロット明細から都度集計する。
 - 同じ「出荷予定日 × 発注元 × メーカー」に複数のピックがあってよい（追加ピック）。ユニーク制約は設けない。
-- 索引: `(scheduled_ship_date, status)` / `(client_id)` / `(issued_by_user_id)`。
+- 索引: `(scheduled_ship_date, status)` / `(client_id)` / `(inventory_maker_id)` / `(issued_by_user_id)`。CHECK: `revision >= 1`・`status IN (issued, outdated, cancelled)`。
 
 #### `users` / `users_tokens`
 
@@ -801,6 +801,12 @@ sequenceDiagram
 **段階 4 で実装したルーティング（発送）**: `/`（作業画面へ redirect）、`/shipping_slips`（作業画面。`?date=YYYY-MM-DD&filter=all|unpacked|shortage`。全ロール）、`/shipping_slips/new`・`/shipping_slips/:id/edit`（伝票登録・数量変更。`staff` 以上）、`/masters/clients`・`/masters/shipping_items`・`/masters/expiration_rules`（参照。全ロール）、`/management/{clients,shipping_items,expiration_rules}/new|:id/edit`（編集。`admin`）。対象倉庫（`INVENTORY_WAREHOUSE_ID`）が未設定の間は、伝票登録・再引当・数量変更を拒否して画面に警告を出す。
 
 PDF 帳票は LiveView ではなく Controller（`ReportController`：`total_pick/2`・`work_order/2`・`total_pick_bundle/2`）でダウンロード配信し、認可は HTTP plug で `staff` 以上に限定する。
+
+**段階 5（F-S6）で実装したルーティング（発送）**: `/total_picks`（一覧。`?date=&client_id=&maker_id=&status=&page=`。全ロール）、`/total_picks/:id`（詳細・再発行・取消。参照は全ロール、操作は `staff` 以上）、`/reports/total_picks/:id`（ピック表）・`/reports/total_picks/:id/bundle`（ピック表＋作業指示書）・`/reports/work_orders/:id`（作業指示書）（`staff` 以上。HTTP plug）。作業画面のフィルタに `filter=unpicked`（未ピックのみ）を追加した。
+
+**ピック表の件数・箱数（段階 5 で確定）**: 明細の「商品 × 期限日」ごとには**バラ数**を出す。**件数・箱数は商品単位**（その商品の全伝票の合計）で、商品の先頭行にだけ出す。ロットは個数単位なので、期限日ごとに分けると件数が整数にならない場合があるため。
+
+**ピックから外れる契機（段階 5 の実装）**: 数量・出荷予定日の変更（`pending` に戻る）と梱包前の取消で、同一トランザクション内で伝票をピックから外す。ピックは残りの伝票があれば `outdated`、無ければ `cancelled`。梱包完了では外さない。出庫取消（F-S7）は `TotalPicks.release/2` を呼ぶ。
 
 ---
 

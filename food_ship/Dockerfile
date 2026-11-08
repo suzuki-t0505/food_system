@@ -76,8 +76,11 @@ RUN mix release
 # the compiled release and other runtime necessities
 FROM ${RUNNER_IMAGE} AS final
 
+# PDF 帳票(ChromicPDF)用に chromium と日本語フォント(fonts-noto-cjk)を入れる。
+# 帳票は都度生成して保存しない。外部リソースは読み込まない(architecture §10)。
 RUN apt-get update \
   && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates \
+     chromium fonts-noto-cjk \
   && rm -rf /var/lib/apt/lists/*
 
 # Set the locale
@@ -93,6 +96,12 @@ RUN chown nobody /app
 
 # set runner ENV
 ENV MIX_ENV="prod"
+
+# Chromium(PDF 帳票)。nobody のホーム(/nonexistent)は書き込めないため、設定・キャッシュの置き場に
+# /tmp を使う。本番は root 以外(nobody)で実行し、サンドボックスは無効にしない(`no_sandbox` は
+# 開発の config/dev.exs だけ)。
+ENV HOME=/tmp
+ENV PDF_CHROME_PATH=/usr/bin/chromium
 
 # Only copy the final release from the build stage
 COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/food_ship ./

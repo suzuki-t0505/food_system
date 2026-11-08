@@ -25,4 +25,8 @@ defmodule FoodShip.ShippingSlips.SlipAllocatedLot do
 
   @doc "期限なし(`9999-12-31`)か。"
   def no_expiration?(%__MODULE__{expiration_date: date}), do: date == @no_expiration
+
+  @doc "期限日の表示。期限なし(`9999-12-31`)は「期限なし」。"
+  def expiration_label(%Date{} = date) when date == @no_expiration, do: "期限なし"
+  def expiration_label(%Date{} = date), do: Date.to_iso8601(date)
 end
