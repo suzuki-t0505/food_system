@@ -1,8 +1,3 @@
-<!--
-Qiita ドラフトのテンプレート。
-- ファイル冒頭の front matter は Qiita CLI（qiita-cli）の形式に合わせている。手動で貼り付けて投稿する場合は front matter を除く
-- 該当しない節は削ってよい
--->
 ---
 title: "【技術名】〇〇で △△ エラーが出たときの原因と解決方法"
 tags:
@@ -10,6 +5,12 @@ tags:
   - Phoenix
 private: false
 ---
+
+<!--
+Qiita ドラフトのテンプレート。
+- ファイル冒頭の front matter は Qiita CLI（qiita-cli）の形式に合わせている。手動で貼り付けて投稿する場合は front matter を除く
+- 該当しない節は削ってよい
+-->
 
 ## はじめに
 
