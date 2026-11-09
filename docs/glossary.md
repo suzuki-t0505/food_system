@@ -99,7 +99,7 @@
 | 在庫出庫オーダー ID | `inventory_order_id` | 発送 | 伝票に対応する在庫側 `shipment_orders.id` |
 | 梱包 / 梱包完了 | `packed` / `packed_at` | 発送 | 全数をまとめて梱包し終えること（分割梱包は扱わない）。梱包完了で在庫側の **出庫確定** を呼ぶ |
 | 再引当 | — | 発送 | `pending` / `shortage` の伝票に対し、既存オーダーの照会・解除 → 引当 → 引当合計の検証を行う手順。個別と一括がある |
-| 一括再引当 | — | 発送 | `pending` / `shortage` の伝票を出荷予定日昇順 → `slip_no` 昇順で順に再引当する。CSV 取込の中断からの復旧にも使う |
+| 一括再引当 | — | 発送 | `pending` / `shortage` の伝票を、全日付にわたり出荷予定日昇順 → `slip_no` 昇順で順に再引当する。再試行で直らない恒久エラー（`unauthorized`・`not_found`・`validation_failed`）の `pending` は対象外。CSV 取込の中断からの復旧にも使う |
 | 引当エラー | `allocation_error` | 発送 | 直近の在庫側 API 失敗の理由。`connection` は **一時エラー**（再試行で直る）、`unauthorized` / `not_found` / `validation_failed` / `idempotency_conflict` は **恒久エラー**（設定・マスタ・内容の修正が必要） |
 | 不足バラ数 | `shortage_pieces` | 発送 | `shortage` のとき在庫側が返した不足数 |
 | 対象倉庫 / デフォルト倉庫 | `is_default`（在庫の `warehouses`） | 在庫・発送 | 発送システムが引当を要求する倉庫。在庫の倉庫画面で `admin` が設定する（0 件または 1 件。手動設定のみ）。発送は引当のたびに API ⑥ の `is_default` で取得する。未設定の間は伝票登録・再引当・数量変更を受け付けない。アーカイブ済みの倉庫は設定不可、デフォルト倉庫はアーカイブ不可 |

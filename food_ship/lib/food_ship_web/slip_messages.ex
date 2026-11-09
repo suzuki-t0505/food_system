@@ -60,6 +60,58 @@ defmodule FoodShipWeb.SlipMessages do
 
   def allocation_result({:error, reason}), do: {:error, error_message(reason)}
 
+  @doc """
+  一括処理(取込後の引当・一括再引当・一括梱包完了)の 1 件の結果を、`{種別, 文言}` にする。
+
+  種別は `:ok`(引当済み・梱包完了)・`:shortage`(在庫不足)・`:pending`(引当待ちのまま)・
+  `:error`(失敗。伝票は元の状態のまま)。結果表の表示と、件数の集計に使う。
+  """
+  def bulk_outcome({:ok, %ShippingSlip{status: :allocated}, _info}), do: {:ok, "引当済み"}
+
+  def bulk_outcome({:ok, %ShippingSlip{status: :shortage} = slip, _info}),
+    do: {:shortage, "在庫不足(不足 #{slip.shortage_pieces} 個)"}
+
+  def bulk_outcome({:ok, %ShippingSlip{status: :packed}, %{reconciled: true}}),
+    do: {:ok, "在庫側の出庫済みに合わせて梱包完了"}
+
+  def bulk_outcome({:ok, %ShippingSlip{status: :packed}}), do: {:ok, "梱包完了"}
+
+  def bulk_outcome({:ok, %ShippingSlip{status: :pending} = slip, info}) do
+    detail =
+      case info do
+        %{errors: [_ | _] = errors} -> "(" <> Enum.map_join(errors, "、", & &1.message) <> ")"
+        _ -> ""
+      end
+
+    {:pending, (pending_message(slip) || "引当が完了していません。") <> detail}
+  end
+
+  def bulk_outcome({:error, reason}), do: {:error, error_message(reason)}
+  def bulk_outcome(_other), do: {:error, error_message(:unexpected)}
+
+  @doc """
+  一括処理の要約。`operation` は `:allocate`(引当)・`:pack`(梱包完了)、`counts` は種別ごとの件数。
+
+      bulk_summary(:allocate, %{ok: 2, shortage: 1})
+      #=> "3 件を処理しました(引当済み 2 件・在庫不足 1 件)。"
+  """
+  def bulk_summary(operation, counts) do
+    parts =
+      operation
+      |> kind_labels()
+      |> Enum.map(fn {kind, label} -> {label, Map.get(counts, kind, 0)} end)
+      |> Enum.filter(fn {_label, count} -> count > 0 end)
+      |> Enum.map(fn {label, count} -> "#{label} #{count} 件" end)
+
+    total = counts |> Map.values() |> Enum.sum()
+    "#{total} 件を処理しました(" <> Enum.join(parts, "・") <> ")。"
+  end
+
+  defp kind_labels(:allocate),
+    do: [ok: "引当済み", shortage: "在庫不足", pending: "引当待ち", error: "エラー"]
+
+  defp kind_labels(:pack), do: [ok: "梱包完了", error: "失敗"]
+
   @doc "操作の失敗(`{:error, reason}`)の文言。在庫 API のエラーも含む。"
   def error_message(:forbidden), do: "権限がありません。"
   def error_message(:stale), do: "他の操作で更新されました。画面を読み込み直します。"
@@ -75,5 +127,6 @@ defmodule FoodShipWeb.SlipMessages do
   def error_message({:remote_state, status}),
     do: "在庫システムのオーダーの状態(#{status})では、この操作はできません。"
 
+  def error_message({:file, message}), do: message
   def error_message(_other), do: "操作に失敗しました。"
 end

@@ -128,7 +128,7 @@ flowchart TB
 | `FoodShip.Clients` | `Client` |
 | `FoodShip.ShippingItems` | `ShippingItem` |
 | `FoodShip.ExpirationRules` | `ExpirationRule` |
-| `FoodShip.ShippingSlips` | `ShippingSlip`, `SlipAllocatedLot`（登録・引当・再引当・数量変更・梱包・取消・箱数の修正。**段階 4 で実装済み**。一括再引当・CSV 取込は段階 5）。補助モジュール `AllocationResult`（在庫 API の応答 → 伝票への反映内容。純粋関数） |
+| `FoodShip.ShippingSlips` | `ShippingSlip`, `SlipAllocatedLot`（登録・引当・再引当・数量変更・梱包・取消・箱数の修正。**段階 4 で実装済み**。CSV 取込・一括再引当の対象取得も実装済み）。補助モジュール `AllocationResult`（在庫 API の応答 → 伝票への反映内容。純粋関数）、`CsvParser`（CSV の解析。純粋関数）、`CsvImport`（CSV の行の検証）、`Bulk`（伝票を 1 件ずつ順に処理するループ） |
 | `FoodShip.TotalPicks` | `TotalPick`（作成・再発行・取消・ピック明細と仕分け内訳の集計。段階 5） |
 | `FoodShip.Inventory.Client` | 在庫側 API クライアント（`Req`）。外部境界モジュール |
 
@@ -310,8 +310,8 @@ end
 ### 9.3 非同期処理（`Task` ＋ `handle_info`）
 
 - 画面からの在庫 API 呼び出し（登録時の引当・再引当・梱包完了・取消）は LiveView のイベントハンドラ内で同期的に待たず、`Task` ＋ `handle_info` で結果を受ける（coding-rules §9.9）。実行中は対象の行・ボタンを無効化して二重送信を防ぐ。
-- CSV 取込: **保存（全行 `pending` の一括 INSERT）は Task の前に完了**し、Task は引当 API の呼び出しだけを担う。`Task.start`（監視なし）のため、アプリ再起動などで中断しても、`pending` の行を一括再引当で復旧できる。進捗を DB に持たない（`pending` の件数が進捗の代わり）。
-- 一括梱包完了・一括再引当は 1 伝票ずつ順に処理し、進捗（完了件数／全件）と伝票ごとの成否を `handle_info` で表示する。
+- CSV 取込: 文字コードは UTF-8（BOM 可）、1 行目は見出し行、上限は 2,000 行 / 1 MB。**検証と保存（全行 `pending` を 1 トランザクションで、ファイル順に INSERT）は Task の前に完了**し、Task は引当 API の呼び出しだけを担う（`Bulk.run/4`）。`Task.start` ＋ `Process.monitor` で、アプリ再起動や Task の異常終了で中断しても検出して案内し、`pending` の行を一括再引当で復旧できる。進捗を DB に持たない（`pending` の件数が進捗の代わり）。
+- 一括梱包完了・一括再引当は 1 伝票ずつ順に処理し（`Bulk.run/4`）、進捗（完了件数／全件）と伝票ごとの成否を `handle_info` で表示する。対象の伝票は全件を `busy` にして、全件の処理後にまとめて解放・再表示する（進捗のたびに表全体を再送しないため）。
 - 監査ログは `Task` の中で出さず、結果を受ける `handle_info` の成功節で出す（`Task` は別プロセスのため `socket` の情報が取れない）。
 - **作業画面の構成（段階 4）**: 再引当・取消・梱包完了は `start_action/5`（権限検査 → `Task.start` → `busy`〔処理中の伝票 ID の `MapSet`〕に追加）で始め、結果は `{:slip_result, action, id, result}` で受ける。`busy` の伝票は行・ボタンを無効化し、二重に押されたイベントは無視する。結果を受けたら伝票とタブの残件数を読み直し、直前のメッセージを消して最新の結果だけを表示する。箱数の修正は DB だけの更新なので `Task` にしない。
 - 登録・数量変更のフォームは、保存（`pending`）まで同期で行い、引当だけを `Task` にして、結果を受けた `handle_info` で作業画面（その伝票の出荷予定日のタブ）へ遷移する。
@@ -439,7 +439,7 @@ end
 | :-- | :-- |
 | 引当 API の応答（95 パーセンタイル 1 秒以内） | ロットの 1 クエリロック、荷崩しの算術化（1 UPDATE）、`(warehouse_id, item_id, expiration_date, received_date)` の複合ユニーク索引を先出しの並びに流用 |
 | 作業画面の 2 秒以内表示（1 日 1,000 伝票） | `(scheduled_ship_date, status)` 索引、一覧のページネーション／日付タブ単位の読み込み、引当ロット明細の事前結合 |
-| CSV 1,000 行の取込 30 秒・引当完了 15 分 | 保存を一括 INSERT（引当と分離）、引当は Task で 1 件ずつ（API の冪等・リトライと整合） |
+| CSV 1,000 行の取込 30 秒・引当完了 15 分 | 保存を 1 トランザクションでまとめて INSERT（引当と分離）、引当は Task で 1 件ずつ（API の冪等・リトライと整合） |
 | PDF 50 伝票 30 秒 | ChromicPDF のプール数・タイムアウトの設定、必要に応じ非同期化 |
 | データ不整合の防止 | 単一トランザクション、DB の CHECK 制約、ロックキー順の固定、冪等性（内容一致判定） |
 | 在庫 API の一時障害の吸収 | `retry: :transient` で最大 3 回（1・2・4 秒）、`pending` での保存、`allocation_error` の区別、一括再引当 |

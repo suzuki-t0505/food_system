@@ -233,12 +233,14 @@ lib/
 │   ├── clients.ex  /  clients/client.ex                       # ［現状］発注元（スキーマのモジュール名は FoodShip.Clients.Client）
 │   ├── shipping_items.ex  /  shipping_items/shipping_item.ex  # ［現状］在庫側の商品の取得・再取得を含む
 │   ├── expiration_rules.ex  /  expiration_rules/expiration_rule.ex   # ［現状］
-│   ├── shipping_slips.ex               # Context: 登録・引当・再引当・梱包・取消・数量変更［現状］（CSV 取込は段階 5）
+│   ├── shipping_slips.ex               # Context: 登録・引当・再引当・梱包・取消・数量変更・CSV 取込・一括処理の対象取得［現状］
 │   ├── shipping_slips/
 │   │   ├── shipping_slip.ex            # ［現状］
 │   │   ├── slip_allocated_lot.ex       # ［現状］
 │   │   ├── allocation_result.ex        # 在庫 API の応答 → 伝票への反映内容（純粋関数）［現状］
-│   │   └── csv_import.ex               # CSV の検証・パース（Schema ではない補助モジュール）［計画：段階 5］
+│   │   ├── csv_parser.ex               # CSV のバイト列 → 行（BOM・UTF-8・引用符・見出し・上限。純粋関数）［現状］
+│   │   ├── csv_import.ex               # CSV の行の検証（形式・マスタ・ファイル内の重複。Schema ではない補助モジュール）［現状］
+│   │   └── bulk.ex                     # 伝票を 1 件ずつ順に処理するループ（取込後の引当・一括再引当・一括梱包完了で共通）［現状］
 │   ├── total_picks.ex                  # Context: 作成・再発行・取消・集計クエリ［計画：段階 5］
 │   ├── total_picks/total_pick.ex
 │   ├── inventory/
@@ -262,7 +264,7 @@ lib/
     │   └── error_*.ex / page_controller.ex   # ［現状］`/` は作業画面へ redirect
     └── live/
         ├── user_session_live/          # ログイン・パスワード変更［現状］
-        ├── shipping_slip_live/         # 出荷日別の作業画面（index.ex）／伝票登録・数量変更（form.ex）［現状］。CSV 取込は段階 5
+        ├── shipping_slip_live/         # 出荷日別の作業画面（index.ex。一括再引当・一括梱包完了を含む）／伝票登録・数量変更（form.ex）／CSV 取込（import.ex）［現状］
         ├── client_live/ shipping_item_live/ expiration_rule_live/   # マスタの参照一覧（index.ex）［現状］
         ├── total_pick_live/            # 一覧・詳細（index.ex / show.ex）［計画：段階 5］
         └── management/                 # admin 専用
@@ -290,7 +292,7 @@ test/
 │   ├── shipping_slips_test.exs / shipping_slips_concurrency_test.exs   # ［現状］
 │   ├── clients_test.exs / shipping_items_test.exs / expiration_rules_test.exs   # ［現状］
 │   ├── total_picks_test.exs            # ［計画：段階 5］
-│   └── shipping_slips/csv_import_test.exs   # ［計画：段階 5］
+│   └── shipping_slips/                  # csv_parser_test.exs / import_csv_test.exs / bulk_test.exs［現状］
 ├── food_ship_web/controllers/report_controller_test.exs   # Utils.Pdf のみモック［計画：段階 5］
 └── support/
     ├── inventory_stub.ex               # 在庫 API の Req.Test スタブ（応答の組み立て・routes/1・calls/0）［現状］

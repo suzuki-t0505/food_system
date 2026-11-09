@@ -28,10 +28,20 @@ defmodule FoodShip.ShippingSlips do
   alias FoodShip.Inventory.Client, as: InventoryClient
   alias FoodShip.Repo
   alias FoodShip.ShippingItems.ShippingItem
-  alias FoodShip.ShippingSlips.{AllocationResult, ShippingSlip, SlipAllocatedLot}
+
+  alias FoodShip.ShippingSlips.{
+    AllocationResult,
+    CsvImport,
+    CsvParser,
+    ShippingSlip,
+    SlipAllocatedLot
+  }
+
   alias FoodShip.Utils.{Calc, Permission}
 
   @unpacked [:pending, :allocated, :shortage]
+  # 4 バイト整数の列の上限(CSV 取込で、桁あふれを保存前に弾く)
+  @max_int 2_147_483_647
 
   ## 参照
 
@@ -77,6 +87,35 @@ defmodule FoodShip.ShippingSlips do
     Repo.exists?(
       from s in ShippingSlip, where: s.scheduled_ship_date == ^date and s.status == :packed
     )
+  end
+
+  @doc """
+  一括再引当の対象(functional-design §6.2)。`pending` / `shortage` の伝票を、出荷予定日の昇順 →
+  `slip_no` の昇順で返す(全日付)。
+
+  `pending` のうち、再試行で直らない引当エラー(`unauthorized`・`not_found`・`validation_failed`)の
+  伝票は対象外で、修正後に個別に再引当する(`ShippingSlip.retryable_error?/1`)。
+  """
+  def list_reallocation_targets do
+    retryable = ShippingSlip.retryable_errors()
+
+    ShippingSlip
+    |> where([s], s.status in [:pending, :shortage])
+    |> where([s], is_nil(s.allocation_error) or s.allocation_error in ^retryable)
+    |> order_by([s], asc: s.scheduled_ship_date, asc: s.slip_no)
+    |> Repo.all()
+    |> preload_slip()
+  end
+
+  @doc "ID の伝票を、出荷予定日の昇順 → `slip_no` の昇順で返す(一括梱包完了の対象)。存在しない ID は無視する。"
+  def list_slips_by_ids(ids) when is_list(ids) do
+    ids = Enum.flat_map(ids, &List.wrap(cast_id(&1)))
+
+    ShippingSlip
+    |> where([s], s.id in ^ids)
+    |> order_by([s], asc: s.scheduled_ship_date, asc: s.slip_no)
+    |> Repo.all()
+    |> preload_slip()
   end
 
   defp filter_status(query, :all), do: query
@@ -169,6 +208,104 @@ defmodule FoodShip.ShippingSlips do
         {:error, changeset} -> {:error, changeset}
       end
     end
+  end
+
+  @doc """
+  CSV から伝票を一括登録する(functional-design §6.1)。在庫 API は呼ばない(続けて、戻り値の順に
+  `allocate_shipping_slip/2` を呼ぶ)。
+
+  1. 権限・デフォルト倉庫を確認する(未設定・通信失敗なら、ファイルを読む前に拒否)
+  2. `CsvParser` で解析し、`CsvImport` で行を検証する(形式・マスタ・ファイル内の重複)。続けて手入力と
+     同じ `ShippingSlip.create_changeset/2` で、既存の伝票との重複・数量を検証する
+  3. **1 行でもエラーがあれば何も保存せず**、行番号つきのエラーを全行ぶん返す
+  4. エラーがなければ、全行を 1 トランザクションで `pending`・`input_source = csv` として
+     **ファイル順**に保存する(`slip_no` の採番がファイル順になる)
+
+  戻り値は、保存した伝票を**引当順**(出荷予定日の昇順 → ファイル順)に並べた `{:ok, [{行番号, 伝票}]}`、
+  または `{:error, {:invalid, [%{line: 行番号, message: 文言}]}}`・`{:error, {:file, 文言}}`(ファイル
+  単位のエラー)・`{:error, :forbidden | :warehouse_not_configured | :connection | :unauthorized}`。
+  """
+  def import_csv(scope, binary) when is_binary(binary) do
+    with :ok <- authorize(scope, :manage_shipping_slips),
+         {:ok, _warehouse_id} <- ensure_warehouse(),
+         {:ok, rows} <- parse_csv(binary),
+         {:ok, changesets} <- validate_csv_rows(scope, rows) do
+      insert_csv_rows(changesets)
+    end
+  end
+
+  defp parse_csv(binary) do
+    case CsvParser.parse(binary) do
+      {:ok, rows} -> {:ok, rows}
+      {:error, message} -> {:error, {:file, message}}
+    end
+  end
+
+  # 形式・マスタ・ファイル内の重複(`CsvImport`)と、既存との重複・数量(changeset)をまとめて検証する
+  defp validate_csv_rows(scope, rows) do
+    {entries, errors} = CsvImport.prepare(rows)
+
+    {changesets, changeset_errors} =
+      entries
+      |> Enum.map(&csv_changeset(scope, &1))
+      |> Enum.split_with(fn {_line, changeset} -> changeset.valid? end)
+
+    errors = Enum.sort_by(errors ++ Enum.flat_map(changeset_errors, &csv_errors/1), & &1.line)
+
+    if errors == [], do: {:ok, changesets}, else: {:error, {:invalid, errors}}
+  end
+
+  defp csv_changeset(scope, %{line: line, attrs: attrs}) do
+    {attrs, client, item} = build_attrs(attrs, "csv")
+    attrs = Map.put(attrs, "created_by_user_id", scope.user.id)
+
+    changeset =
+      %ShippingSlip{}
+      |> ShippingSlip.create_changeset(attrs)
+      |> validate_master(:client_id, client)
+      |> validate_master(:shipping_item_id, item)
+      |> Ecto.Changeset.validate_number(:total_piece_qty, less_than_or_equal_to: @max_int)
+      |> Ecto.Changeset.validate_number(:box_count, less_than_or_equal_to: @max_int)
+
+    {line, changeset}
+  end
+
+  defp csv_errors({line, %Ecto.Changeset{errors: errors}}) do
+    for {field, {message, _opts}} <- errors do
+      %{line: line, message: "#{csv_label(field)} #{message}"}
+    end
+  end
+
+  defp csv_label(:client_id), do: "client_code"
+  defp csv_label(:shipping_item_id), do: "item_code"
+  defp csv_label(field), do: Atom.to_string(field)
+
+  # 全行を 1 トランザクションで、ファイル順に保存する。保存の直前に別の操作が同じ発注元伝票番号を
+  # 登録した場合(`unique_constraint`)は、その行のエラーにして全体をロールバックする
+  defp insert_csv_rows(changesets) do
+    Repo.transact(fn ->
+      with {:ok, saved} <- Enum.reduce_while(changesets, {:ok, []}, &insert_csv_row/2) do
+        {:ok, saved |> Enum.reverse() |> in_allocation_order()}
+      end
+    end)
+  end
+
+  defp insert_csv_row({line, changeset}, {:ok, saved}) do
+    case Repo.insert(changeset) do
+      {:ok, slip} -> {:cont, {:ok, [{line, slip} | saved]}}
+      {:error, changeset} -> {:halt, {:error, {:invalid, csv_errors({line, changeset})}}}
+    end
+  end
+
+  # 引当の順序: 出荷予定日の早い順 → ファイル順
+  defp in_allocation_order(saved) do
+    slips = saved |> Enum.map(&elem(&1, 1)) |> preload_slip() |> Map.new(&{&1.id, &1})
+
+    saved
+    |> Enum.map(fn {line, slip} -> {line, Map.fetch!(slips, slip.id)} end)
+    |> Enum.sort_by(fn {line, slip} ->
+      {Date.to_gregorian_days(slip.scheduled_ship_date), line}
+    end)
   end
 
   @doc """
@@ -538,8 +675,9 @@ defmodule FoodShip.ShippingSlips do
 
   ## 入力の組み立て(マスタからの計算)
 
-  # 登録: 出庫総数量・箱数の初期値・最低許容期限日をマスタ(発送商品・出荷期限ルール)から計算する
-  defp build_attrs(attrs) do
+  # 登録: 出庫総数量・箱数の初期値・最低許容期限日をマスタ(発送商品・出荷期限ルール)から計算する。
+  # `source` は `input_source`(手入力 `"manual"`・CSV `"csv"`)
+  defp build_attrs(attrs, source \\ "manual") do
     attrs = stringify(attrs)
     client = fetch(Client, attrs["client_id"])
     item = fetch(ShippingItem, attrs["shipping_item_id"])
@@ -561,7 +699,7 @@ defmodule FoodShip.ShippingSlips do
     attrs =
       attrs
       |> Map.merge(computed)
-      |> Map.put("input_source", "manual")
+      |> Map.put("input_source", source)
       |> put_box_count(item && count && Calc.default_box_count(count, item.boxes_per_order))
 
     {attrs, client, item}
