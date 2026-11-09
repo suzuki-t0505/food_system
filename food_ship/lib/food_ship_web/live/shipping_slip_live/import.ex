@@ -286,7 +286,6 @@ defmodule FoodShipWeb.ShippingSlipLive.Import do
     |> stream_insert(:results, bulk_result_row(slip, line, result))
   end
 
-  defp result_slip({:ok, slip}), do: slip
   defp result_slip({:ok, slip, _info}), do: slip
 
   defp finish(socket) do
