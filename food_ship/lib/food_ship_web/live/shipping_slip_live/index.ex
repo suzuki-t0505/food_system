@@ -421,6 +421,7 @@ defmodule FoodShipWeb.ShippingSlipLive.Index do
           |> MapSet.to_list()
           |> ShippingSlips.list_slips_by_ids()
           |> Enum.filter(&(&1.status == :allocated))
+          |> Enum.reject(&MapSet.member?(socket.assigns.busy, &1.id))
 
         if slips == [] do
           {:noreply, flash_once(socket, :error, "梱包完了にできる伝票が選択されていません。")}

@@ -38,7 +38,7 @@
 
 ```elixir
 import_csv(scope, binary) ::
-  {:ok, [%ShippingSlip{}]}              # 保存した伝票。引当順(出荷予定日 → ファイル順)
+  {:ok, [{行番号, %ShippingSlip{}}]}    # 保存した伝票。引当順(出荷予定日 → ファイル順)
   | {:error, {:invalid, [%{line: n, message: s}]}}
   | {:error, :forbidden | :warehouse_not_configured | :connection | :unauthorized | {:file, message}}
 ```
@@ -148,3 +148,9 @@ Bulk.run(scope, slips, fun, notify)
 1. 日付は `YYYY-MM-DD` のみ受け付ける(`2026/11/20` は検証エラー)
 2. 一括再引当の対象に `idempotency_conflict` の `pending` を含める(再引当が解除から行うため)。含めない場合は `retryable_error?/1` を `:connection` のみにする
 3. 検証・保存は画面のプロセスで同期実行し、引当だけを `Task` にする(functional-design §6.1 の「保存は Task の前に完了」に合わせる)
+
+## 実装時の補足(設計からの差分)
+
+- `CsvImport.prepare/1` は `{検証を通った行, エラー}` を常に返し、`import_csv/2` が既存との重複・数量の検証(changeset)とあわせてエラーを全行ぶんまとめる(設計では段階を分けて返す想定だったが、利用者が一度に全てのエラーを直せるようにした)
+- 一括処理の対象行は、進捗のたびではなく**全件の処理後にまとめて**表示を更新する(進捗のたびに表全体を再送しないため)。実行中は対象全件を `busy` にして無効化し、行ごとの成否は進捗パネルの結果表に出す
+- 件数は 1〜1,000,000、出庫総数量・箱数は 4 バイト整数の範囲を検証する(桁あふれを保存前に弾く)
