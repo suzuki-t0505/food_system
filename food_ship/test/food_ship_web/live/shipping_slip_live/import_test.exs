@@ -113,8 +113,7 @@ defmodule FoodShipWeb.ShippingSlipLive.ImportTest do
       assert Enum.map(saved, & &1.status) == [:allocated, :shortage, :allocated]
 
       # 引当は 出荷予定日 → ファイル順(A-2, A-3, A-1)
-      posted =
-        for {"POST", @orders, %{"external_slip_id" => id}} <- InventoryStub.calls(), do: id
+      posted = for {"POST", @orders, %{"external_slip_id" => id}} <- InventoryStub.calls(), do: id
 
       by_id = Map.new(saved, &{&1.id, &1.client_slip_no})
       assert Enum.map(posted, &by_id[&1]) == ["A-2", "A-3", "A-1"]

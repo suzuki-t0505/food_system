@@ -90,6 +90,7 @@ defmodule FoodShip.ShippingSlips.BulkTest do
       late = slip_fixture(%{scheduled_ship_date: ~D[2026-11-25]}, scope)
       early_a = slip_fixture(%{scheduled_ship_date: ~D[2026-11-20]}, scope)
       early_b = slip_fixture(%{scheduled_ship_date: ~D[2026-11-20]}, scope)
+
       shortage =
         set_row(slip_fixture(%{scheduled_ship_date: ~D[2026-11-22]}, scope), status: :shortage)
 

@@ -36,8 +36,8 @@
 
 ## 5. 検証
 
-- [ ] `mix format --check-formatted`
+- [ ] `mix format --check-formatted`(代替確認: 新規・変更した `.ex` / `.exs` を Elixir 1.14 の構文チェックと `Code.format_string!` で確認済み。HEEx の整形〔HTMLFormatter〕は未確認)
 - [ ] `mix compile --warnings-as-errors`
-- [ ] `mix test`(全体)
+- [ ] `mix test`(全体)(代替確認: `CsvParser` の単体テスト 10 件のみ、Elixir 1.14 の単独実行で成功。DB・LiveView のテストは未実行)
 - [ ] 受け入れ条件(requirements.md)を 1 項目ずつ照合
 - [ ] 性能: 1,000 行の検証・保存が 30 秒以内(テストで確認)。引当の 15 分以内は在庫 API を含む実測が必要なため、未実測であることを PR に明記

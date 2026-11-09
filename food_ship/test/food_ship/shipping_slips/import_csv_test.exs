@@ -101,8 +101,7 @@ defmodule FoodShip.ShippingSlips.ImportCsvTest do
     test "1,000 行の検証・保存が 30 秒以内", %{scope: scope} do
       lines = for n <- 1..1_000, do: "CL1,P-#{n},2026-11-#{rem(n, 20) + 1 + 9},IT1,2"
 
-      {microseconds, result} =
-        :timer.tc(fn -> ShippingSlips.import_csv(scope, csv(lines)) end)
+      {microseconds, result} = :timer.tc(fn -> ShippingSlips.import_csv(scope, csv(lines)) end)
 
       assert {:ok, saved} = result
       assert length(saved) == 1_000

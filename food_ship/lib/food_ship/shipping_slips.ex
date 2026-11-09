@@ -28,6 +28,7 @@ defmodule FoodShip.ShippingSlips do
   alias FoodShip.Inventory.Client, as: InventoryClient
   alias FoodShip.Repo
   alias FoodShip.ShippingItems.ShippingItem
+
   alias FoodShip.ShippingSlips.{
     AllocationResult,
     CsvImport,

@@ -116,6 +116,7 @@ defmodule FoodShipWeb.ShippingSlipLive.BulkTest do
       late = pending_slip(scope, %{scheduled_ship_date: ~D[2026-11-25]})
       early_a = pending_slip(scope, %{scheduled_ship_date: ~D[2026-11-21]})
       early_b = pending_slip(scope, %{scheduled_ship_date: ~D[2026-11-21]})
+
       shortage =
         set_row(pending_slip(scope, %{scheduled_ship_date: ~D[2026-11-22]}), status: :shortage)
 
@@ -133,8 +134,7 @@ defmodule FoodShipWeb.ShippingSlipLive.BulkTest do
 
       assert render(lv) =~ "4 件を処理しました(引当済み 4 件)。"
 
-      posted =
-        for {"POST", @orders, %{"external_slip_id" => id}} <- InventoryStub.calls(), do: id
+      posted = for {"POST", @orders, %{"external_slip_id" => id}} <- InventoryStub.calls(), do: id
 
       assert posted == [early_a.id, early_b.id, shortage.id, late.id]
 
@@ -318,6 +318,7 @@ defmodule FoodShipWeb.ShippingSlipLive.BulkTest do
       assert status_of(untouched) == :allocated
 
       ship_paths = for {"POST", path, _} <- InventoryStub.calls(), do: path
+
       assert ship_paths == [
                "/api/v1/shipment_orders/#{a.inventory_order_id}/ship",
                "/api/v1/shipment_orders/#{b.inventory_order_id}/ship"
