@@ -67,11 +67,13 @@ docs/
 ├── development-guidelines.md  # 開発ガイドライン
 ├── glossary.md                # ユビキタス言語定義
 ├── coding-rules.md            # コーディング規約（[必須] / [推奨] 付き）
-└── ideas/                     # 下書き・アイデア・批判的レビュー
-    ├── 食品在庫管理システム設計.md
-    ├── 食品在庫管理システム設計-critical-review.md
-    ├── 発送システム 基本設計書.md
-    └── 発送システム 基本設計書-critical-review.md
+├── ideas/                     # 下書き・アイデア・批判的レビュー
+│   ├── 食品在庫管理システム設計.md
+│   ├── 食品在庫管理システム設計-critical-review.md
+│   ├── 発送システム 基本設計書.md
+│   └── 発送システム 基本設計書-critical-review.md
+└── qiita/                     # Qiita 投稿用ドラフト（qiita-draft スキルの出力）
+    └── README.md
 ```
 
 | 種別 | 置き場所 | 内容 | 更新頻度 |
@@ -79,6 +81,7 @@ docs/
 | 永続ドキュメント | `docs/*.md` | 「何を作るか」「どう作るか」の基本設計。プロジェクト全体の北極星 | 低い。変更は承認を得て行う |
 | 下書き・アイデア | `docs/ideas/` | 壁打ち・設計ドラフト・批判的分析レポート。自由形式 | 履歴として残す（正式版へ昇格後も削除しない） |
 | 作業単位のドキュメント | `.steering/{YYYYMMDD}-{タスク名}/` | 「今回何をするか」。`requirements.md` / `design.md` / `tasklist.md` | 作業ごとに新規作成し、履歴として保持 |
+| Qiita 投稿用ドラフト | `docs/qiita/{YYYYMMDD}-{題材}.md` | 実装での失敗・解決したエラーの技術記事ドラフト（`qiita-draft` スキル）。投稿は手動。秘密情報・業務固有の情報を含めない | 失敗・エラー解決のつど。履歴として残す |
 | HTML モック | `mock/{YYYYMMDD}/` | クライアント向け UI イメージ（`create-mock` スキル） | 作業ごと |
 
 - **命名**: 永続ドキュメントは英語のケバブケース（`product-requirements.md`）。`docs/ideas/` は日本語名可（批判的レビューは対象ファイル名の末尾に `-critical-review` を付ける）。`.steering/` は `20250115-add-user-profile` 形式（日付 8 桁 ＋ 英小文字ケバブケース）。
