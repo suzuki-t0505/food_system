@@ -1,61 +1,109 @@
 ---
-title: "【技術名】〇〇で △△ エラーが出たときの原因と解決方法"
+title: "Phoenixで〇〇を実装したら△△エラーが出たので解決する"
 tags:
   - Elixir
   - Phoenix
+  - LiveView
 private: false
 ---
 
 <!--
-Qiita ドラフトのテンプレート。
-- ファイル冒頭の front matter は Qiita CLI（qiita-cli）の形式に合わせている。手動で貼り付けて投稿する場合は front matter を除く
-- 該当しない節は削ってよい
+Qiita ドラフトのテンプレート。構成と文体は style-guide.md（過去の投稿記事の傾向）に合わせている。
+- 上の front matter は Qiita CLI（qiita-cli）の形式。手動で貼り付けて投稿する場合は front matter とこのコメントを除く
+- 見出しは題材に合わせて言い換える・削る（「## 〇〇を実装」は実際の作業名にする）
+- 「（スクリーンショット: 〜）」は投稿時に画像へ差し替える目印
 -->
 
-## はじめに
+# はじめに
 
-<!-- 何を作っていて、何が起きたかを 2〜3 文で。結論（原因と解決）も先に一言で書く -->
+今回は〇〇を実装していたときに発生した△△エラーと、その解決方法をまとめます。
 
-## 環境
+この記事では以下のバージョンを使用しています。
 
-| 項目 | バージョン |
-| :-- | :-- |
-| Elixir | |
-| Erlang/OTP | |
-| Phoenix | |
+```bash
+$ elixir -v
+Erlang/OTP 29
+Elixir 1.20.5
 
-## 起きたこと
-
-<!-- やろうとしたことと、実際に起きたこと -->
-
-```text
-（エラーメッセージ。検索に掛かる部分は原文のまま）
+$ mix phx.new -v
+Phoenix installer v1.8.16
 ```
+
+## 〇〇を実装
+
+まず、〇〇をするために以下のコードを追加しました。
+
+```diff_elixir:lib/sample_web/live/sample_live.ex
+defmodule SampleWeb.SampleLive do
+...
++   def handle_event("save", params, socket) do
++     ...
++   end
+...
+end
+```
+
+## 発生したエラー
+
+以下のコマンドを実行します。
+
+```bash
+mix test
+```
+
+すると以下のエラーが発生しました。
+
+```
+** (SampleError) エラーメッセージ（検索に掛かる部分は原文のまま）
+```
+
+（スクリーンショット: エラー画面）
 
 ## 原因
 
-<!-- なぜ起きたか。該当コード（修正前）を示す -->
+原因は〇〇でした。
 
-```elixir:lib/example.ex
-# 修正前
+```elixir:lib/sample_web/live/sample_live.ex
+# 問題のあったコード
 ```
 
-## 試してだめだったこと
+まず、`foo/1`で〜をしています。
+続いて、`bar/2`で〜をしていますが、ここで〜となるためエラーになります。
 
-<!-- 遠回りした内容と、なぜだめだったか。なければ節ごと削る -->
+:::note warn
+最初は〜が原因だと考えて〜を試しましたが、〜のため解決しませんでした。
+:::
 
 ## 解決方法
 
-```elixir:lib/example.ex
-# 修正後
+以下のように修正します。
+
+```diff_elixir:lib/sample_web/live/sample_live.ex
+defmodule SampleWeb.SampleLive do
+...
+-   修正前のコード
++   修正後のコード
+...
+end
 ```
 
-<!-- なぜこれで直るのかを説明する -->
+〜とすることで、〜されるようになります。
 
-## まとめ
+もう一度コマンドを実行すると、エラーが出ずに成功しました。
 
-<!-- 学び・再発防止策を箇条書きで 2〜3 点 -->
+```bash
+mix test
+```
 
-## 参考
+:::note info
+補足があればここに書きます。
+:::
 
-<!-- 公式ドキュメントなどの URL -->
+## 最後
+
+〇〇は〜なので、〜するときは注意が必要でした。
+自分は〜だと思い込んでいたので、原因に気づくまで時間がかかりました。
+
+https://hexdocs.pm/phoenix/overview.html
+
+ここまで読んでいただきありがとうございました。
