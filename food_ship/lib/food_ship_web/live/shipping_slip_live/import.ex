@@ -66,7 +66,7 @@ defmodule FoodShipWeb.ShippingSlipLive.Import do
           type="submit"
           class="btn btn-primary"
           id="import-submit"
-          disabled={@phase == :importing or !@warehouse_configured or @uploads.csv.entries == []}
+          disabled={submit_disabled?(@phase, @warehouse_configured, @uploads.csv.entries)}
         >
           取り込む
         </button>
@@ -309,6 +309,12 @@ defmodule FoodShipWeb.ShippingSlipLive.Import do
     |> assign(:summary, nil)
     |> assign(:first_date, nil)
     |> assign(:run, nil)
+  end
+
+  # 実行中・倉庫が未設定・ファイル未選択・選んだファイルに問題がある(拡張子・サイズ)ときは送信できない
+  defp submit_disabled?(phase, warehouse_configured, entries) do
+    phase == :importing or !warehouse_configured or entries == [] or
+      Enum.any?(entries, &(!&1.valid?))
   end
 
   defp upload_error_message(:too_large), do: "ファイルが大きすぎます(上限 1 MB)。"

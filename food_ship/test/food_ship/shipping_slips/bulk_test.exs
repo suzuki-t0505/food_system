@@ -103,9 +103,29 @@ defmodule FoodShip.ShippingSlips.BulkTest do
 
       pending = slip_fixture(%{}, scope)
 
-      for status <- [:allocated, :packed, :cancelled, :reversed] do
-        set_row(slip_fixture(%{}, scope), status: status)
-      end
+      now = DateTime.utc_now(:second)
+      user_id = scope.user.id
+      order_id = Ecto.ULID.generate()
+
+      closed = [
+        [status: :allocated, inventory_order_id: order_id],
+        [
+          status: :packed,
+          inventory_order_id: order_id,
+          packed_at: now,
+          packed_by_user_id: user_id
+        ],
+        [status: :cancelled, cancelled_at: now, cancelled_by_user_id: user_id],
+        [
+          status: :reversed,
+          inventory_order_id: order_id,
+          reversed_at: now,
+          reversed_by_user_id: user_id,
+          reverse_reason: "テスト"
+        ]
+      ]
+
+      for attrs <- closed, do: set_row(slip_fixture(%{}, scope), attrs)
 
       assert Enum.map(ShippingSlips.list_reallocation_targets(), & &1.id) == [pending.id]
     end

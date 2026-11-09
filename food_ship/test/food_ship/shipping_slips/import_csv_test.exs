@@ -192,7 +192,13 @@ defmodule FoodShip.ShippingSlips.ImportCsvTest do
           scope
         )
 
-      Repo.update_all(from(s in ShippingSlip, where: s.id == ^slip.id), set: [status: :cancelled])
+      Repo.update_all(from(s in ShippingSlip, where: s.id == ^slip.id),
+        set: [
+          status: :cancelled,
+          cancelled_at: DateTime.utc_now(:second),
+          cancelled_by_user_id: scope.user.id
+        ]
+      )
 
       assert {:ok, [_]} = ShippingSlips.import_csv(scope, csv(["CL1,A-1,2026-11-20,IT1,3"]))
     end

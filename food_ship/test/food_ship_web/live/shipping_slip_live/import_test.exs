@@ -169,6 +169,7 @@ defmodule FoodShipWeb.ShippingSlipLive.ImportTest do
         ])
 
       assert {:error, _} = render_upload(input, "slips.xlsx")
+      assert render(lv) =~ "CSV ファイル(.csv)を選択してください。"
       assert has_element?(lv, "#import-submit[disabled]")
     end
 
