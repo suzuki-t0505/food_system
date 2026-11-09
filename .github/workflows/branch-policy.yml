@@ -1,0 +1,48 @@
+name: Branch policy
+
+# PR のマージ先とマージ元の組み合わせを検査する(docs/development-guidelines.md §3.1)。
+#
+#   - main へマージできるのは、このリポジトリの dev ブランチからの PR だけ
+#   - それ以外のブランチ(feature / fix / docs / claude/... など)は dev へだけマージする
+#
+# この検査を強制するには、GitHub の Settings > Branches で main と dev に
+# 「Require status checks to pass before merging」を設定し、このジョブ(branch policy)を必須にする。
+on:
+  pull_request:
+    # マージ先(base)の変更も検査する
+    types: [opened, reopened, synchronize, edited]
+
+permissions: {}
+
+jobs:
+  branch-policy:
+    name: branch policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: マージ先とマージ元の組み合わせを検査する
+        env:
+          # 値はシェルに直接埋め込まず、環境変数で受ける(ブランチ名によるコマンド注入を避ける)
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          THIS_REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          case "$BASE" in
+            dev)
+              echo "OK: ${HEAD} -> dev"
+              ;;
+            main)
+              if [ "$HEAD" = "dev" ] && [ "$HEAD_REPO" = "$THIS_REPO" ]; then
+                echo "OK: dev -> main"
+              else
+                echo "::error::main へマージできるのは dev ブランチからの PR だけです(今回: ${HEAD_REPO}:${HEAD} -> main)。マージ先を dev に変更してください。"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::PR のマージ先は dev にしてください(今回: ${HEAD} -> ${BASE})。main へは dev からの PR だけです。"
+              exit 1
+              ;;
+          esac
