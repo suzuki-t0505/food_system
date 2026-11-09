@@ -284,18 +284,17 @@ defmodule FoodShip.ShippingSlips do
   # 登録した場合(`unique_constraint`)は、その行のエラーにして全体をロールバックする
   defp insert_csv_rows(changesets) do
     Repo.transact(fn ->
-      changesets
-      |> Enum.reduce_while({:ok, []}, fn {line, changeset}, {:ok, saved} ->
-        case Repo.insert(changeset) do
-          {:ok, slip} -> {:cont, {:ok, [{line, slip} | saved]}}
-          {:error, changeset} -> {:halt, {:error, {:invalid, csv_errors({line, changeset})}}}
-        end
-      end)
-      |> case do
-        {:ok, saved} -> {:ok, saved |> Enum.reverse() |> in_allocation_order()}
-        {:error, reason} -> {:error, reason}
+      with {:ok, saved} <- Enum.reduce_while(changesets, {:ok, []}, &insert_csv_row/2) do
+        {:ok, saved |> Enum.reverse() |> in_allocation_order()}
       end
     end)
+  end
+
+  defp insert_csv_row({line, changeset}, {:ok, saved}) do
+    case Repo.insert(changeset) do
+      {:ok, slip} -> {:cont, {:ok, [{line, slip} | saved]}}
+      {:error, changeset} -> {:halt, {:error, {:invalid, csv_errors({line, changeset})}}}
+    end
   end
 
   # 引当の順序: 出荷予定日の早い順 → ファイル順

@@ -14,9 +14,7 @@ defmodule FoodShip.ShippingSlips.Bulk do
 
   require Logger
 
-  alias FoodShip.ShippingSlips.ShippingSlip
-
-  @type result :: {:ok, %ShippingSlip{}} | {:ok, %ShippingSlip{}, map()} | {:error, term()}
+  @type result :: {:ok, struct()} | {:ok, struct(), map()} | {:error, term()}
 
   @doc """
   `slips` を与えられた順に `fun.(scope, slip)` で処理し、1 件ごとに
@@ -24,9 +22,9 @@ defmodule FoodShip.ShippingSlips.Bulk do
   """
   @spec run(
           term(),
-          [%ShippingSlip{}],
-          (term(), %ShippingSlip{} -> result()),
-          (pos_integer(), pos_integer(), %ShippingSlip{}, result() -> any())
+          [struct()],
+          (term(), struct() -> result()),
+          (pos_integer(), pos_integer(), struct(), result() -> any())
         ) :: :ok
   def run(scope, slips, fun, notify) when is_function(fun, 2) and is_function(notify, 4) do
     total = length(slips)
