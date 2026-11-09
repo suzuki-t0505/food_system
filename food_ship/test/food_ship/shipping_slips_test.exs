@@ -1,5 +1,5 @@
 defmodule FoodShip.ShippingSlipsTest do
-  # Req.Test のスタブ・アプリ設定(倉庫 ID)を扱うため async: false
+  # Req.Test のスタブを扱うため async: false
   use FoodShip.DataCase, async: false
 
   import FoodShip.AccountsFixtures
@@ -8,10 +8,15 @@ defmodule FoodShip.ShippingSlipsTest do
 
   alias FoodShip.{Clients, ExpirationRules, ShippingItems, ShippingSlips}
   alias FoodShip.InventoryStub
-  alias FoodShip.Inventory.Client, as: InventoryClient
   alias FoodShip.ShippingSlips.{ShippingSlip, SlipAllocatedLot}
 
   setup {Req.Test, :set_req_test_from_context}
+
+  # 伝票の作成・数量変更・引当では、在庫のデフォルト倉庫の取得が走る
+  setup do
+    InventoryStub.stub_defaults()
+    :ok
+  end
 
   @orders "/api/v1/shipment_orders"
   @lot1 "01JE0000000000000000000001"
@@ -228,19 +233,34 @@ defmodule FoodShip.ShippingSlipsTest do
       assert Repo.aggregate(ShippingSlip, :count) == 0
     end
 
-    test "対象倉庫が未設定なら保存しない" do
+    test "デフォルト倉庫が未設定なら保存しない" do
       client = client_fixture()
       item = shipping_item_fixture()
+      without_default_warehouse()
 
-      without_warehouse(fn ->
-        assert {:error, :warehouse_not_configured} =
-                 ShippingSlips.create_shipping_slip(staff_scope(), %{
-                   client_id: client.id,
-                   shipping_item_id: item.id,
-                   scheduled_ship_date: "2026-11-20",
-                   order_count: 1
-                 })
-      end)
+      assert {:error, :warehouse_not_configured} =
+               ShippingSlips.create_shipping_slip(staff_scope(), %{
+                 client_id: client.id,
+                 shipping_item_id: item.id,
+                 scheduled_ship_date: "2026-11-20",
+                 order_count: 1
+               })
+
+      assert Repo.aggregate(ShippingSlip, :count) == 0
+    end
+
+    test "在庫 API に接続できないときは保存しない" do
+      client = client_fixture()
+      item = shipping_item_fixture()
+      InventoryStub.routes([{"GET", "/api/v1/warehouses", &InventoryStub.timeout/1}])
+
+      assert {:error, :connection} =
+               ShippingSlips.create_shipping_slip(staff_scope(), %{
+                 client_id: client.id,
+                 shipping_item_id: item.id,
+                 scheduled_ship_date: "2026-11-20",
+                 order_count: 1
+               })
 
       assert Repo.aggregate(ShippingSlip, :count) == 0
     end
@@ -336,7 +356,7 @@ defmodule FoodShip.ShippingSlipsTest do
       assert [{"POST", @orders, body}] = InventoryStub.calls()
 
       assert body == %{
-               "warehouse_id" => InventoryClient.warehouse_id(),
+               "warehouse_id" => InventoryStub.default_warehouse_id(),
                "shipment_date" => "2026-11-20",
                "external_slip_id" => slip.id,
                "operator" => scope.user.email,
@@ -697,16 +717,53 @@ defmodule FoodShip.ShippingSlipsTest do
       assert slip_row(slip.id).allocation_attempted_at == nil
     end
 
-    test "対象倉庫が未設定なら API を呼ばず、状態も変えない" do
+    test "デフォルト倉庫が未設定なら引当を要求せず、状態も変えない" do
       scope = staff_scope()
       slip = slip_fixture(%{}, scope)
+      without_default_warehouse()
 
-      without_warehouse(fn ->
-        assert {:error, :warehouse_not_configured} =
-                 ShippingSlips.allocate_shipping_slip(scope, slip)
-      end)
+      assert {:error, :warehouse_not_configured} =
+               ShippingSlips.allocate_shipping_slip(scope, slip)
 
+      assert [{"GET", "/api/v1/warehouses", nil}] = InventoryStub.calls()
       assert slip_row(slip.id).allocation_attempted_at == nil
+    end
+
+    test "デフォルト倉庫を取得できないときは、引当を要求せず状態も変えない" do
+      scope = staff_scope()
+      slip = slip_fixture(%{}, scope)
+      InventoryStub.routes([{"GET", "/api/v1/warehouses", &InventoryStub.timeout/1}])
+
+      assert {:error, :connection} = ShippingSlips.allocate_shipping_slip(scope, slip)
+
+      # 通信失敗はリトライされるので、倉庫の取得は複数回呼ばれる。引当(POST)は呼ばれない
+      calls = InventoryStub.calls()
+      assert calls != []
+      assert Enum.all?(calls, &match?({"GET", "/api/v1/warehouses", nil}, &1))
+      assert slip_row(slip.id).allocation_attempted_at == nil
+    end
+
+    test "引当は、在庫側で切り替えた最新のデフォルト倉庫に要求する" do
+      scope = staff_scope()
+      slip = slip_fixture(%{}, scope)
+      new_default = "01JA0000000000000000000002"
+
+      InventoryStub.routes([
+        {"GET", "/api/v1/warehouses",
+         fn conn ->
+           InventoryStub.json(conn, 200, %{
+             "warehouses" => [%{"id" => new_default, "is_default" => true}]
+           })
+         end},
+        route_allocate(respond_json(201, allocated_order(slip)))
+      ])
+
+      assert {:ok, %{status: :allocated}, _} = ShippingSlips.allocate_shipping_slip(scope, slip)
+
+      assert [
+               {"GET", "/api/v1/warehouses", nil},
+               {"POST", @orders, %{"warehouse_id" => ^new_default}}
+             ] = InventoryStub.calls()
     end
 
     test "API の呼び出し中に別の操作で状態が変わっていたら :stale で、結果を反映しない" do
@@ -832,16 +889,16 @@ defmodule FoodShip.ShippingSlipsTest do
       assert slip_row(slip.id).order_count == 3
     end
 
-    test "viewer は拒否し、対象倉庫が未設定なら変更しない" do
+    test "viewer は拒否し、デフォルト倉庫が未設定なら変更しない" do
       slip = slip_fixture()
 
       assert {:error, :forbidden} =
                ShippingSlips.update_shipping_slip(viewer_scope(), slip, %{"order_count" => "1"})
 
-      without_warehouse(fn ->
-        assert {:error, :warehouse_not_configured} =
-                 ShippingSlips.update_shipping_slip(staff_scope(), slip, %{"order_count" => "1"})
-      end)
+      without_default_warehouse()
+
+      assert {:error, :warehouse_not_configured} =
+               ShippingSlips.update_shipping_slip(staff_scope(), slip, %{"order_count" => "1"})
 
       assert slip_row(slip.id).order_count == 3
     end
@@ -1395,15 +1452,10 @@ defmodule FoodShip.ShippingSlipsTest do
     end
   end
 
-  # 対象倉庫の設定を一時的に外す
-  defp without_warehouse(fun) do
-    previous = Application.get_env(:food_ship, InventoryClient)
-    Application.put_env(:food_ship, InventoryClient, Keyword.put(previous, :warehouse_id, nil))
-
-    try do
-      fun.()
-    after
-      Application.put_env(:food_ship, InventoryClient, previous)
-    end
+  # 在庫のデフォルト倉庫が未設定の状態にする(倉庫はあるが、どれもデフォルトではない)
+  defp without_default_warehouse do
+    InventoryStub.routes([
+      {"GET", "/api/v1/warehouses", &InventoryStub.without_default_warehouse/1}
+    ])
   end
 end

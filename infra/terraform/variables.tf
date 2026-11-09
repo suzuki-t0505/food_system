@@ -103,9 +103,3 @@ variable "github_deploy_branch" {
     error_message = "github_deploy_branch は空にできません。"
   }
 }
-
-variable "inventory_warehouse_id" {
-  description = "発送システムの対象倉庫 ID(段階 4 で使う)"
-  type        = string
-  default     = ""
-}

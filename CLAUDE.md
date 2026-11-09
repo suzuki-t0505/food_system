@@ -52,6 +52,12 @@ Tech stack: Elixir 1.20.5 / Erlang 29 (OTP 29) / Phoenix 1.8.16 / LiveView / Tai
 
 命名規則: `20250115-add-user-profile` 形式
 
+## ブランチと PR のルール
+
+- **PR のマージ先（base）は必ず `dev`**。`main` へマージできるのは `dev` ブランチからの PR だけ。それ以外のブランチ（`claude/...` を含む）から `main` への PR は作らない
+- PR を作る前に `git fetch` で最新のリモートを取得し、`dev` の有無を確認する（`fetch` なしの `git branch -r` は古いことがある）
+- 詳細と強制の方法は `docs/development-guidelines.md` §3.1・`.github/workflows/branch-policy.yml`
+
 ## ディレクトリ構造
 
 ### 永続的ドキュメント(`docs/`)

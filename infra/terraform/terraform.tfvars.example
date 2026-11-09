@@ -18,6 +18,3 @@ max_instances       = 2
 allowed_source_ranges = []
 
 rate_limit_per_minute = 600
-
-# 発送の対象倉庫 ID(段階 4 で使う。在庫側 GET /api/v1/warehouses で確認)
-inventory_warehouse_id = ""

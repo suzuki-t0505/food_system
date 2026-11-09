@@ -52,6 +52,13 @@ for {code, name} <- [{"W01", "第1倉庫"}, {"W02", "第2倉庫"}] do
   end)
 end
 
+# 開発では発送システムがそのまま動くよう、デフォルト倉庫が無ければ W01 を設定する。
+# 本番は管理者が倉庫画面で設定する(自動では設定しない)。
+if is_nil(Warehouses.get_default_warehouse()) do
+  default = Repo.get_by!(Warehouse, warehouse_code: "W01")
+  {:ok, _} = Warehouses.set_default_warehouse(scope, default)
+end
+
 for {code, name, maker, units, type} <- [
       {"I001", "缶詰(賞味期限)", maker_a, 24, :best_before},
       {"I002", "惣菜(消費期限)", maker_a, 12, :consumption},

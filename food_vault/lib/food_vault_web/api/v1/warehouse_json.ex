@@ -7,7 +7,8 @@ defmodule FoodVaultWeb.Api.V1.WarehouseJSON do
     %{
       id: warehouse.id,
       warehouse_code: warehouse.warehouse_code,
-      warehouse_name: warehouse.warehouse_name
+      warehouse_name: warehouse.warehouse_name,
+      is_default: warehouse.is_default
     }
   end
 end

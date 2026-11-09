@@ -18,6 +18,7 @@ defmodule FoodShip.Inventory.Client do
     * `{:error, :insufficient_stock, [%{item_id: _, shortage_cases: _, shortage_pieces: _}]}` - 422
     * `{:error, :validation_failed, [%{path: _, message: _}]}` - 422
     * `{:error, :connection}` - 通信失敗・リトライ後も続く 5xx・想定外の応答
+    * `{:error, :warehouse_not_configured}` - デフォルト倉庫が未設定(`default_warehouse_id/1` のみ)
 
   設定は `runtime.exs` で `FoodShip.Inventory.Client` をキーに集約し、実行時に読む。
   """
@@ -32,6 +33,7 @@ defmodule FoodShip.Inventory.Client do
   }
 
   @orders_path "/api/v1/shipment_orders"
+  @warehouses_path "/api/v1/warehouses"
 
   @doc """
   ① 出庫引当。
@@ -110,8 +112,28 @@ defmodule FoodShip.Inventory.Client do
     end
   end
 
-  @doc "対象倉庫の ID。未設定なら `nil`(設定は `INVENTORY_WAREHOUSE_ID`)。"
-  def warehouse_id, do: config(:warehouse_id)
+  @doc """
+  ⑥ 対象倉庫(在庫側のデフォルト倉庫)の ID。
+
+  在庫の倉庫画面で設定されたデフォルト倉庫を、呼び出しのたびに取得する(キャッシュしない)。
+  デフォルト倉庫が無ければ `{:error, :warehouse_not_configured}`。
+
+  `opts` は `Req` のオプション。画面表示のチェックでは `retry: false` を渡してリトライの待機を避ける。
+  """
+  def default_warehouse_id(opts \\ []) do
+    case request(:get, @warehouses_path, opts) do
+      {:ok, 200, %{"warehouses" => warehouses}} when is_list(warehouses) ->
+        warehouses
+        |> Enum.find(&(is_map(&1) and &1["is_default"] == true))
+        |> parse_default_warehouse()
+
+      {:ok, _status, _body} ->
+        {:error, :connection}
+
+      error ->
+        error
+    end
+  end
 
   ## 要求
 
@@ -277,6 +299,10 @@ defmodule FoodShip.Inventory.Client do
   end
 
   defp parse_allocation(_allocation), do: {:error, :connection}
+
+  defp parse_default_warehouse(%{"id" => id}) when is_binary(id) and id != "", do: {:ok, id}
+  defp parse_default_warehouse(nil), do: {:error, :warehouse_not_configured}
+  defp parse_default_warehouse(_warehouse), do: {:error, :connection}
 
   defp parse_item(%{"id" => id} = item) do
     {:ok,

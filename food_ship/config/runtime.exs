@@ -35,8 +35,8 @@ end
 
 # 在庫 API クライアント(`FoodShip.Inventory.Client`)。test は config/test.exs で設定する。
 # 開発は既定値あり。本番は BASE_URL・TOKEN が未設定なら起動時に落とす。
-# `INVENTORY_WAREHOUSE_ID` は任意(空は未設定)。未設定の間は伝票登録・再引当を拒否する
-# (GCP の初回デプロイは空で起動し、在庫側 `GET /api/v1/warehouses` で ID を確認してから設定する)。
+# 引当先の倉庫は環境変数ではなく、在庫側の「デフォルト倉庫」(在庫の倉庫画面で設定)を
+# `GET /api/v1/warehouses` で取得する。未設定の間は伝票登録・再引当を拒否する。
 if config_env() in [:dev, :prod] do
   dev? = config_env() == :dev
 
@@ -53,16 +53,9 @@ if config_env() in [:dev, :prod] do
     end
   end
 
-  warehouse_id =
-    case System.get_env("INVENTORY_WAREHOUSE_ID") do
-      id when id not in [nil, ""] -> String.trim(id)
-      _ -> nil
-    end
-
   config :food_ship, FoodShip.Inventory.Client,
     base_url: required.("INVENTORY_API_BASE_URL", "http://food_vault_web:4000"),
     token: required.("INVENTORY_API_TOKEN", "dev-inventory-api-token"),
-    warehouse_id: warehouse_id,
     connect_timeout:
       String.to_integer(System.get_env("INVENTORY_API_CONNECT_TIMEOUT_MS", "5000")),
     receive_timeout:

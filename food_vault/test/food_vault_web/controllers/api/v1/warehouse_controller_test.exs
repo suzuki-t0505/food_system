@@ -15,9 +15,34 @@ defmodule FoodVaultWeb.Api.V1.WarehouseControllerTest do
     assert %{"warehouses" => warehouses} = json_response(conn, 200)
 
     assert Enum.filter(warehouses, &(&1["id"] in [a.id, b.id])) == [
-             %{"id" => a.id, "warehouse_code" => "ZZ-A", "warehouse_name" => "第1倉庫"},
-             %{"id" => b.id, "warehouse_code" => "ZZ-B", "warehouse_name" => "第2倉庫"}
+             %{
+               "id" => a.id,
+               "warehouse_code" => "ZZ-A",
+               "warehouse_name" => "第1倉庫",
+               "is_default" => false
+             },
+             %{
+               "id" => b.id,
+               "warehouse_code" => "ZZ-B",
+               "warehouse_name" => "第2倉庫",
+               "is_default" => false
+             }
            ]
+  end
+
+  test "デフォルト倉庫は is_default が true になる" do
+    other = warehouse_fixture()
+    default = warehouse_fixture()
+    {:ok, _} = Warehouses.set_default_warehouse(user_scope_fixture(), default)
+
+    conn = get(api_conn(), "/api/v1/warehouses")
+
+    assert %{"warehouses" => warehouses} = json_response(conn, 200)
+
+    default_ids = for %{"is_default" => true, "id" => id} <- warehouses, do: id
+
+    assert default_ids == [default.id]
+    assert Enum.find(warehouses, &(&1["id"] == other.id))["is_default"] == false
   end
 
   test "アーカイブ済みの倉庫は返さない" do
