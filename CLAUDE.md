@@ -52,6 +52,12 @@ Tech stack: Elixir 1.20.5 / Erlang 29 (OTP 29) / Phoenix 1.8.16 / LiveView / Tai
 
 命名規則: `20250115-add-user-profile` 形式
 
+#### 失敗・エラー解決の記録（Qiita ドラフト）
+
+- 実装でつまずいた失敗や、解決に手間取ったエラーは、`/qiita-draft` で `docs/qiita/{YYYYMMDD}-{題材}.md` に Qiita 投稿用のドラフトとしてまとめる
+- 作業の完了報告のとき、記事にできそうな失敗・エラー解決があれば題材を一言で提案する（ドラフトの作成はユーザーの指示を受けてから）
+- ドラフトに秘密情報・GCP のプロジェクト ID・個人情報・業務固有の情報を書かない。投稿はユーザーが手動で行う
+
 ## ブランチと PR のルール
 
 - **PR のマージ先（base）は必ず `dev`**。`main` へマージできるのは `dev` ブランチからの PR だけ。それ以外のブランチ（`claude/...` を含む）から `main` への PR は作らない
@@ -68,6 +74,10 @@ Tech stack: Elixir 1.20.5 / Erlang 29 (OTP 29) / Phoenix 1.8.16 / LiveView / Tai
 - 壁打ち・ブレインストーミングの成果物
 - 技術調査メモ
 - 自由形式（構造化は最小限）
+
+#### Qiita 投稿用ドラフト（`docs/qiita/`）
+- 実装での失敗・解決したエラーをまとめた技術記事のドラフト（`qiita-draft` スキルの出力）
+- 命名規則: `20261109-credo-nesting-depth` 形式
 
 #### 正式版ドキュメント
 - **product-requirements.md** - プロダクト要求定義書
