@@ -42,6 +42,10 @@ defmodule FoodShip.ShippingSlips.ShippingSlip do
   }
 
   @transient_errors [:connection]
+  # 一括再引当の対象にする `pending` の引当エラー。一時エラーに加え、再引当が旧オーダーの解除から
+  # 行うため直る `idempotency_conflict`。恒久エラー(`unauthorized`・`not_found`・`validation_failed`)は
+  # 設定・マスタ・内容を直してから個別に再引当する
+  @retryable_errors [:connection, :idempotency_conflict]
 
   schema "shipping_slips" do
     field :slip_no, :integer, read_after_writes: true
@@ -88,6 +92,13 @@ defmodule FoodShip.ShippingSlips.ShippingSlip do
 
   @doc "一時エラー(再試行で直る)か。恒久エラーは設定・マスタ・内容の修正が必要。"
   def transient_error?(error), do: error in @transient_errors
+
+  @doc "一括再引当の対象になる引当エラー(`nil` = エラーなしを含む)か。"
+  def retryable_error?(nil), do: true
+  def retryable_error?(error), do: error in @retryable_errors
+
+  @doc "一括再引当の対象になる引当エラーの一覧(クエリ用)。"
+  def retryable_errors, do: @retryable_errors
 
   @doc "梱包前(`pending` / `allocated` / `shortage`)か。残件数・数量変更・取消の対象。"
   def unpacked?(%__MODULE__{status: status}), do: status in [:pending, :allocated, :shortage]

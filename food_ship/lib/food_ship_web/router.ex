@@ -74,6 +74,7 @@ defmodule FoodShipWeb.Router do
     live_session :require_authenticated_staff,
       on_mount: [{FoodShipWeb.UserAuth, :ensure_authenticated_staff}] do
       live "/shipping_slips/new", ShippingSlipLive.Form, :new
+      live "/shipping_slips/import", ShippingSlipLive.Import, :new
       live "/shipping_slips/:id/edit", ShippingSlipLive.Form, :edit
     end
   end
