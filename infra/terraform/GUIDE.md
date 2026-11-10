@@ -30,14 +30,21 @@
 
 ## 1. 全体像
 
-```
-利用者 ─HTTPS(443)→ 外部アプリケーション LB ──→ Cloud Run: food-vault ─┐
-                     │  └ Cloud Armor           Cloud Run: food-ship ──┤─ VPC ─→ Cloud SQL(プライベート IP)
-                     └ マネージド証明書            │                     │
-                                                 └─ VPC(内部扱い)─→ food-vault /api/v1
-Cloud Run Job: food-vault-migrate / food-ship-migrate ─ VPC ─→ Cloud SQL
-GitHub Actions ─(WIF・キーなし)→ デプロイ用 SA ─→ Artifact Registry / Cloud Run
-```
+![GCP インフラ構成図](architecture.svg)
+
+- 実線は通信・操作、青の太線は発送 → 在庫の内部 API 呼び出し、橙の破線は遮断される経路、灰色の破線は設定の適用・参照
+- **Cloud Run は VPC のサブネットの中には無い。** Google が管理する基盤で動き、外向きの通信だけが Direct VPC egress でサブネットを通る(各インスタンスがサブネットの IP を 1 つ使う)。受信は LB から届き、サブネットは通らない
+- デプロイ用 SA の「Cloud Run の更新」は 2 つのサービスと 2 つの Job が対象。Secret Manager も全サービス・Job が参照する。図ではそれぞれ矢印 1 本にまとめている
+
+| 経路 | 結果 | 効いている設定 |
+| :-- | :-- | :-- |
+| 利用者 → LB → Cloud Run | 通る | ホスト名で在庫・発送に振り分け。WAF とレート制限を通過したものだけ |
+| 利用者 → `*.run.app`(直接) | 届かない | Cloud Run の `ingress` を「内部と LB のみ」に制限 |
+| 利用者 → LB → 在庫の `/api` | 403 | Cloud Armor の優先度 100 のルール |
+| 発送 → 在庫 `/api/v1` | 通る | 発送の `egress = "ALL_TRAFFIC"`、サブネットの Private Google Access、Bearer トークン |
+| Cloud Run・Job → Cloud SQL | 通る | Direct VPC egress と VPC ピアリング。Cloud SQL にパブリック IP は無い |
+| 発送 → インターネット | 出られない | 全通信が VPC を通り、Cloud NAT が無いため |
+| GitHub Actions → GCP | `dev` ブランチのみ | Workload Identity Federation の条件。サービスアカウントキーは作らない |
 
 守りたいことは 4 つで、ほとんどの設定はこのどれかのためにある。
 
