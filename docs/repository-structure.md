@@ -40,6 +40,7 @@ food_system/
 ```
 infra/terraform/
 ├── README.md                  # 初回構築・デプロイ・検証の手順
+├── GUIDE.md                   # 各設定の解説（なぜ必要か・設定しないとどうなるか）
 ├── versions.tf                # Terraform / プロバイダのバージョン、backend "gcs"（部分設定）
 ├── .terraform.lock.hcl        # プロバイダのロック（コミットする）
 ├── variables.tf / outputs.tf

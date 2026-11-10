@@ -1,6 +1,6 @@
 # GCP 基盤(Terraform)
 
-在庫管理システム(`food_vault`)と発送システム(`food_ship`)を GCP で動かす構成。設計は [.steering/20261105-gcp-terraform/design.md](../../.steering/20261105-gcp-terraform/design.md)。
+在庫管理システム(`food_vault`)と発送システム(`food_ship`)を GCP で動かす構成。設計は [.steering/20261105-gcp-terraform/design.md](../../.steering/20261105-gcp-terraform/design.md)、各設定の理由(なぜ必要か・設定しないとどうなるか)は [GUIDE.md](GUIDE.md)。
 
 ```
 利用者 ─HTTPS→ 外部アプリケーション LB(Cloud Armor)─→ Cloud Run: food-vault / food-ship ─VPC→ Cloud SQL(PostgreSQL 15)
