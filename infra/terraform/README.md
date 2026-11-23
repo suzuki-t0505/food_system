@@ -135,3 +135,9 @@ terraform test   # プロバイダをモックして plan を評価する(tests/
 ## 削除
 
 `deletion_protection = false` にして `apply` してから `terraform destroy`。Cloud SQL のバックアップも消えるので注意。
+
+`destroy` がサブネット `food-system-run` で `resourceInUseByAnotherResource`(`serverless-ipv4-*` が使用中)になった場合は、1〜2 時間待ってから `terraform destroy` を再実行する。Cloud Run の Direct VPC egress がサブネットに確保した IP は、Cloud Run を削除してもすぐには解放されないため(GCP の仕様。アドレスは手動では削除できない)。解放されたかは次で確認できる。
+
+```bash
+gcloud compute addresses list --filter="name~^serverless-ipv4" --regions=asia-northeast1
+```
